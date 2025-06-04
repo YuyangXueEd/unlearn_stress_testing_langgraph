@@ -1,51 +1,41 @@
 import os
 
-from agent.tools_and_schemas import SearchQueryList, Reflection
 from dotenv import load_dotenv
+from duckduckgo_search import DDGS
 from langchain_core.messages import AIMessage
-from langgraph.types import Send
-from langgraph.graph import StateGraph
-from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
-from google.genai import Client
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
+from agent.configuration import Configuration
+from agent.prompts import (
+    answer_instructions,
+    get_current_date,
+    query_writer_instructions,
+    reflection_instructions,
+)
 from agent.state import (
     OverallState,
     QueryGenerationState,
     ReflectionState,
     WebSearchState,
 )
-from agent.configuration import Configuration
-from agent.prompts import (
-    get_current_date,
-    query_writer_instructions,
-    web_searcher_instructions,
-    reflection_instructions,
-    answer_instructions,
-)
-from langchain_google_genai import ChatGoogleGenerativeAI
-from agent.utils import (
-    get_citations,
-    get_research_topic,
-    insert_citation_markers,
-    resolve_urls,
-)
+from agent.tools_and_schemas import Reflection, SearchQueryList
+from agent.utils import get_research_topic
 
 load_dotenv()
 
-if os.getenv("GEMINI_API_KEY") is None:
-    raise ValueError("GEMINI_API_KEY is not set")
-
-# Used for Google Search API
-genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "lm-studio")
 
 
 # Nodes
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates a search queries based on the User's question.
 
-    Uses Gemini 2.0 Flash to create an optimized search query for web research based on
-    the User's question.
+    Uses the configured LLM to create optimized search queries for web research
+    based on the user's question.
 
     Args:
         state: Current graph state containing the User's question
@@ -60,12 +50,12 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    # init Gemini 2.0 Flash
-    llm = ChatGoogleGenerativeAI(
+    llm = ChatOpenAI(
         model=configurable.query_generator_model,
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        base_url=OPENAI_API_BASE,
+        api_key=OPENAI_API_KEY,
     )
     structured_llm = llm.with_structured_output(SearchQueryList)
 
@@ -91,11 +81,50 @@ def continue_to_web_research(state: QueryGenerationState):
         for idx, search_query in enumerate(state["query_list"])
     ]
 
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
+
+import requests
+
+import requests
+import os
+
+DEFAULT_SEARCH_ENGINE_TIMEOUT = 100
+REFERENCE_COUNT = 5
+GOOGLE_SEARCH_ENDPOINT = "https://customsearch.googleapis.com/customsearch/v1"
+
+def search_with_google(query: str, subscription_key: str, cx: str):
+    """
+    Search with google and return the contexts.
+    """
+    params = {
+        "key": subscription_key,
+        "cx": cx,
+        "q": query,
+        "num": REFERENCE_COUNT,
+    }
+    response = requests.get(
+        GOOGLE_SEARCH_ENDPOINT, params=params, timeout=DEFAULT_SEARCH_ENGINE_TIMEOUT
+    )
+    if not response.ok:
+        print(f"{response.status_code} {response.text}")
+        raise HTTPException(response.status_code, "Search engine error.")
+    json_content = response.json()
+    try:
+        contexts = json_content["items"][:REFERENCE_COUNT]
+    except KeyError:
+        print(f"Error encountered: {json_content}")
+        return []
+    return contexts
+
+
 
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
-    """LangGraph node that performs web research using the native Google Search API tool.
+    """LangGraph node that performs web research using DuckDuckGo.
 
-    Executes a web search using the native Google Search API tool in combination with Gemini 2.0 Flash.
+    Executes a web search using the DuckDuckGo Search API and formats the
+    results for later processing.
 
     Args:
         state: Current graph state containing the search query and research loop count
@@ -106,32 +135,33 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     """
     # Configure
     configurable = Configuration.from_runnable_config(config)
-    formatted_prompt = web_searcher_instructions.format(
-        current_date=get_current_date(),
-        research_topic=state["search_query"],
-    )
+    query = state["search_query"]
 
-    # Uses the google genai client as the langchain client doesn't return grounding metadata
-    response = genai_client.models.generate_content(
-        model=configurable.query_generator_model,
-        contents=formatted_prompt,
-        config={
-            "tools": [{"google_search": {}}],
-            "temperature": 0,
-        },
-    )
-    # resolve the urls to short urls for saving tokens and time
-    resolved_urls = resolve_urls(
-        response.candidates[0].grounding_metadata.grounding_chunks, state["id"]
-    )
-    # Gets the citations and adds them to the generated text
-    citations = get_citations(response, resolved_urls)
-    modified_text = insert_citation_markers(response.text, citations)
-    sources_gathered = [item for citation in citations for item in citation["segments"]]
+    search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
+    # with DDGS() as ddgs:
+    #     print(query, "xxx")
+    #     results = list(ddgs.text(query, max_results=5))
+
+    results = search_with_google(query, search_api_key, 
+    os.environ["GOOGLE_SEARCH_CX"])
+
+    formatted_lines = []
+    sources_gathered = []
+    for res in results:
+        # print(res, "qqq")
+        title = res.get("title", "")
+        # href = res.get("href", "")
+        # body = res.get("body", "")
+        href = res.get("link", "")
+        body = res.get("snippet", "")
+        formatted_lines.append(f"{title}: {body} ({href})")
+        sources_gathered.append({"label": title, "short_url": href, "value": href})
+
+    modified_text = "\n".join(formatted_lines)
 
     return {
         "sources_gathered": sources_gathered,
-        "search_query": [state["search_query"]],
+        "search_query": [query],
         "web_research_result": [modified_text],
     }
 
@@ -162,12 +192,12 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    # init Reasoning Model
-    llm = ChatGoogleGenerativeAI(
+    llm = ChatOpenAI(
         model=reasoning_model,
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        base_url=OPENAI_API_BASE,
+        api_key=OPENAI_API_KEY,
     )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
@@ -241,27 +271,18 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
-    # init Reasoning Model, default to Gemini 2.5 Flash
-    llm = ChatGoogleGenerativeAI(
+    llm = ChatOpenAI(
         model=reasoning_model,
         temperature=0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        base_url=OPENAI_API_BASE,
+        api_key=OPENAI_API_KEY,
     )
     result = llm.invoke(formatted_prompt)
 
-    # Replace the short urls with the original urls and add all used urls to the sources_gathered
-    unique_sources = []
-    for source in state["sources_gathered"]:
-        if source["short_url"] in result.content:
-            result.content = result.content.replace(
-                source["short_url"], source["value"]
-            )
-            unique_sources.append(source)
-
     return {
         "messages": [AIMessage(content=result.content)],
-        "sources_gathered": unique_sources,
+        "sources_gathered": state["sources_gathered"],
     }
 
 
