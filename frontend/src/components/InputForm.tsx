@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { SquarePen, Brain, Send, StopCircle, Zap, Cpu } from "lucide-react";
+import { SquarePen, Brain, Send, StopCircle, Cpu, Paperclip } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -27,6 +27,8 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
   const [model, setModel] = useState("qwen2.5-coder-7b-instruct");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleInternalSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -41,6 +43,17 @@ export const InputForm: React.FC<InputFormProps> = ({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleInternalSubmit();
+    }
+  };
+
+  const handlePdfButtonClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === "application/pdf") {
+      setPdfFile(file);
     }
   };
 
@@ -95,6 +108,28 @@ export const InputForm: React.FC<InputFormProps> = ({
       </div>
       <div className="flex items-center justify-between">
         <div className="flex flex-row gap-2">
+          <div className="flex flex-row items-center bg-neutral-700 border border-neutral-600 text-neutral-300 focus:ring-neutral-500 rounded-xl rounded-t-sm max-w-[100%] sm:max-w-[90%]">
+            <input
+              type="file"
+              accept="application/pdf"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handlePdfChange}
+            />
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="bg-neutral-700 border-none text-neutral-300 rounded-full px-2 py-2 cursor-pointer focus:ring-neutral-500 flex items-center justify-center"
+              style={{ boxShadow: "none", background: "inherit" }}
+              onClick={handlePdfButtonClick}
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            {pdfFile && (
+              <span className="text-xs text-neutral-300 ml-1 mr-2 truncate max-w-[100px]">{pdfFile.name}</span>
+            )}
+          </div>
           <div className="flex flex-row gap-2 bg-neutral-700 border-neutral-600 text-neutral-300 focus:ring-neutral-500 rounded-xl rounded-t-sm pl-2  max-w-[100%] sm:max-w-[90%]">
             <div className="flex flex-row items-center text-sm">
               <Brain className="h-4 w-4 mr-2" />
