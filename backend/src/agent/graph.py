@@ -1,10 +1,13 @@
 import os
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
 
 from dotenv import load_dotenv
 from duckduckgo_search import DDGS
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
@@ -26,8 +29,10 @@ from agent.utils import get_research_topic
 
 load_dotenv()
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "lm-studio")
+
+DEFAULT_SEARCH_ENGINE_TIMEOUT = 100
+REFERENCE_COUNT = 5
+GOOGLE_SEARCH_ENDPOINT = "https://customsearch.googleapis.com/customsearch/v1"
 
 
 # Nodes
@@ -50,12 +55,12 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    llm = ChatOpenAI(
+    llm = AzureChatOpenAI(
         model=configurable.query_generator_model,
         temperature=1.0,
         max_retries=2,
-        base_url=OPENAI_API_BASE,
-        api_key=OPENAI_API_KEY,
+        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
+        api_version=os.getenv('AZURE_OPENAI_API_VERSION'),
     )
     structured_llm = llm.with_structured_output(SearchQueryList)
 
@@ -192,12 +197,12 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    llm = ChatOpenAI(
+    llm = AzureChatOpenAI(
         model=reasoning_model,
         temperature=1.0,
         max_retries=2,
-        base_url=OPENAI_API_BASE,
-        api_key=OPENAI_API_KEY,
+        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
+        api_version=os.getenv('AZURE_OPENAI_API_VERSION')
     )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
@@ -271,12 +276,12 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
-    llm = ChatOpenAI(
+    llm = AzureChatOpenAI(
         model=reasoning_model,
-        temperature=0,
+        temperature=1.0,
         max_retries=2,
-        base_url=OPENAI_API_BASE,
-        api_key=OPENAI_API_KEY,
+        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
+        api_version=os.getenv('AZURE_OPENAI_API_VERSION')
     )
     result = llm.invoke(formatted_prompt)
 
