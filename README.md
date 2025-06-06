@@ -1,42 +1,42 @@
-# anyllm-fullstack-langgraph-quickstart
+# Unlearn Stress Testing LangGraph
 
-## 简介
+## Introduction
 
-基于[google-gemini/gemini-fullstack-langgraph-quickstart](https://github.com/google-gemini/gemini-fullstack-langgraph-quickstart)
+Based on [google-gemini/gemini-fullstack-langgraph-quickstart](https://github.com/google-gemini/gemini-fullstack-langgraph-quickstart)
 
-主要做了如下几个改动：
-1. 支持本地llm(例如lm-studio启动一个qwen2.5-coder-7b-instruct),同时把gemini的api接口改成了openai形式的接口【这个代码全是codex帮改的】
-2. 工具调用改成google search api进行搜索(比较慢，duckduckgo也可以，代码里DDGS相关的代码，只是会经常超限…)【这个代码是在codex改完的基础上，参考[https://github.com/leptonai/search_with_lepton/blob/main/search_with_lepton.py](https://github.com/leptonai/search_with_lepton/blob/main/search_with_lepton.py)里的google search api改的，只是我之前试过了google的所以复制了这个，当然里面还有别的search api，可以后续再试试】
-3. 为了方便完全的本地调试，删掉了一些docker相关的东西
+Main modifications made:
+1. Support for local LLMs (e.g., starting a Azure OpenAI API with lm-studio), while changing Gemini's API interface to OpenAI-compatible format [This code was entirely modified with Codex's help]
+2. Tool calling changed to use Google Search API for searching (relatively slow, DuckDuckGo is also available, there's DDGS-related code in the codebase, but it often hits rate limits...) [This code was modified based on Codex's changes, referencing the Google Search API from [https://github.com/leptonai/search_with_lepton/blob/main/search_with_lepton.py](https://github.com/leptonai/search_with_lepton/blob/main/search_with_lepton.py). I just copied this since I had tried Google's before. Of course, there are other search APIs available that can be tried later]
+3. For convenient local debugging, removed some Docker-related components
 
-## 使用方式
+## Usage
 
-1. python版本需要是3.11以上
-2. 获取google search api的两个参数
-    + api-key：[link](https://developers.google.com/custom-search/v1/introduction?hl=zh-cn#identify_your_application_to_google_with_api_key)
-    + cx：[link](https://stackoverflow.com/questions/6562125/getting-a-cx-id-for-custom-search-google-api-python)
-3. LANGSMITH_API_KEY这个可选，去langchain官网可以搞到
-4. 参考```backend/.env.example```，搞一个```backend/.env```，里面的所有注释放开，改成你的base_url（lm-studio的话就是默认的那个1234端口的）、openai_api_key（本地服务就是随便写的）、google api-key、cx和LANGSMITH_API_KEY
-5. 去backend目录，执行```pip3 install .```
-6. 安装node.js，去frontend目录，执行```npm install```
-7. 回到主目录，执行```make dev```，打开```http://localhost:5173/app/```就能用了
+1. Python version must be 3.11 or above
+2. Obtain two parameters for Google Search API
+    + api-key: [link](https://developers.google.com/custom-search/v1/introduction?hl=zh-cn#identify_your_application_to_google_with_api_key)
+    + cx: [link](https://stackoverflow.com/questions/6562125/getting-a-cx-id-for-custom-search-google-api-python)
+3. LANGSMITH_API_KEY is optional, can be obtained from the LangChain official website
+4. Reference ```backend/.env.example``` to create ```backend/.env```, uncomment all lines and modify to your base_url (for lm-studio, it's the default port 1234), openai_api_key (for local services, just write anything), google api-key, cx and LANGSMITH_API_KEY
+5. Go to the backend directory and run ```pip3 install .```
+6. Install node.js, go to the frontend directory and run ```npm install```
+7. Return to the main directory, run ```make dev```, and open ```http://localhost:5173/app/``` to use
 
-demo1
+Demo 1
 
-![](./demo.jpeg)
 
-demo2
 
-![](./demo2.jpeg)
+Demo 2
+
+
 
 
 ## Star History
 
-<a href="https://star-history.com/#daiwk/anyllm-fullstack-langgraph-quickstart&Date">
+<a href="https://star-history.com/#YuyangXueEd/unlearn_stress_testing_langgraph&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=daiwk/anyllm-fullstack-langgraph-quickstart&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=daiwk/anyllm-fullstack-langgraph-quickstart&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=daiwk/anyllm-fullstack-langgraph-quickstart&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=YuyangXueEd/unlearn_stress_testing_langgraph&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=YuyangXueEd/unlearn_stress_testing_langgraph&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=YuyangXueEd/unlearn_stress_testing_langgraph&type=Date" />
  </picture>
 </a>
 
