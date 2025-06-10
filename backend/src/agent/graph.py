@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from duckduckgo_search import DDGS
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import AzureChatOpenAI
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
@@ -55,14 +55,55 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    llm = AzureChatOpenAI(
-        model=configurable.query_generator_model,
-        temperature=1.0,
-        max_retries=2,
-        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
-        api_version=os.getenv('AZURE_OPENAI_API_VERSION'),
+    # llm = HuggingFaceEndpoint( # Remove HuggingFaceEndpoint initialization
+    #     repo_id=configurable.query_generator_model,
+    #     task="text-generation",
+    #     max_new_tokens=512,
+    #     do_sample=False,
+    #     device_map="auto",
+    # )
+    # chat = ChatHuggingFace(llm=llm, verbose=True) # Remove ChatHuggingFace initialization
+    
+    # Initialize ChatOllama
+    # Ensure Ollama server is running and the model specified in 
+    # configurable.query_generator_model (e.g., "qwen:7b-chat") is available.
+    chat = ChatOllama(
+        model=configurable.query_generator_model, 
+        temperature=1.0, # You can adjust temperature and other parameters
+        base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
-    structured_llm = llm.with_structured_output(SearchQueryList)
+    
+    # For structured output with Ollama, you might need to adjust the method.
+    # Ollama models often work best with JSON mode if they support it,
+    # or by explicitly asking for JSON in the prompt and then parsing.
+    # The `with_structured_output` with "function_calling" might not be directly supported
+    # or might behave differently.
+    # Option 1: Try with 'json_mode' if the Ollama model supports it
+    # structured_llm = chat.with_structured_output(SearchQueryList, json_mode=True)
+    # Option 2: Rely on prompt engineering and PydanticOutputParser (more robust for general models)
+    # from langchain.output_parsers import PydanticOutputParser
+    # parser = PydanticOutputParser(pydantic_object=SearchQueryList)
+    # query_writer_instructions_formatted = query_writer_instructions + "\\n\\n{format_instructions}\\n"
+    # formatted_prompt = query_writer_instructions_formatted.format(
+    #     current_date=current_date,
+    #     research_topic=get_research_topic(state["messages"]),
+    #     number_queries=state["initial_search_query_count"],
+    #     format_instructions=parser.get_format_instructions(),
+    # )
+    # raw_output = chat.invoke(formatted_prompt).content
+    # try:
+    #     parsed_result = parser.parse(raw_output)
+    #     result_query = parsed_result.query
+    # except Exception as e:
+    #     print(f"Failed to parse Ollama output for SearchQueryList: {e}")
+    #     print(f"Raw output: {raw_output}")
+    #     result_query = [] # Fallback
+    # return {"query_list": result_query}
+
+    # Assuming for now that with_structured_output with Ollama might work directly for some models/setups,
+    # or that you'll adapt to PydanticOutputParser as shown above if needed.
+    # If using function_calling or similar, ensure the Ollama model is fine-tuned for it.
+    structured_llm = chat.with_structured_output(SearchQueryList) # Simpler call, may need json_mode or parser
 
     # Format the prompt
     current_date = get_current_date()
@@ -197,14 +238,29 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    llm = AzureChatOpenAI(
-        model=reasoning_model,
+    # llm = HuggingFacePipeline.from_model_id(
+    #     model_id=reasoning_model,  # Or your preferred Qwen LLM
+    #     task="text-generation",
+    #     pipeline_kwargs={
+    #         #"max_new_tokens": config.llm_config.get("max_new_tokens", 512), # Assuming max_new_tokens might be in config
+    #         #"top_k": config.llm_config.get("top_k", 50), # Assuming top_k might be in config
+    #         "temperature": 1.0, # Assuming temperature might be in config
+    #     },
+    #     device_map="auto",
+    # )
+    # result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+
+    # Initialize ChatOllama for reflection
+    chat_reflection = ChatOllama(
+        model=reasoning_model, # Ensure reasoning_model is an Ollama-compatible model name
         temperature=1.0,
-        max_retries=2,
-        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
-        api_version=os.getenv('AZURE_OPENAI_API_VERSION')
+        base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
-    result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+    
+    # Assuming for now that with_structured_output with Ollama might work directly
+    structured_llm_reflection = chat_reflection.with_structured_output(Reflection)
+    result = structured_llm_reflection.invoke(formatted_prompt)
+
 
     return {
         "is_sufficient": result.is_sufficient,
@@ -276,17 +332,16 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
-    llm = AzureChatOpenAI(
-        model=reasoning_model,
-        temperature=1.0,
-        max_retries=2,
-        azure_deployment=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
-        api_version=os.getenv('AZURE_OPENAI_API_VERSION')
+    # Initialize ChatOllama for final answer
+    chat_finalize = ChatOllama(
+        model=reasoning_model, # Ensure reasoning_model is an Ollama-compatible model name
+        temperature=1.0, # Adjust as needed
+        base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
-    result = llm.invoke(formatted_prompt)
+    result_content = chat_finalize.invoke(formatted_prompt).content # Get raw string content
 
     return {
-        "messages": [AIMessage(content=result.content)],
+        "messages": [AIMessage(content=result_content)],
         "sources_gathered": state["sources_gathered"],
     }
 

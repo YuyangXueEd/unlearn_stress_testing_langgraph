@@ -26,7 +26,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 }) => {
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
-  const [model, setModel] = useState("qwen2.5-coder-7b-instruct");
+  const [model, setModel] = useState("qwen3");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -172,11 +172,11 @@ export const InputForm: React.FC<InputFormProps> = ({
               </SelectTrigger>
               <SelectContent className="bg-neutral-700 border-neutral-600 text-neutral-300 cursor-pointer">
                 <SelectItem
-                  value="qwen2.5-coder-7b-instruct"
+                  value="qwen3"
                   className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
                 >
                   <div className="flex items-center">
-                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> qwen2.5-coder-7b-instruct
+                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> qwen3
                   </div>
                 </SelectItem>
               </SelectContent>

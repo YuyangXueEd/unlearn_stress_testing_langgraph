@@ -6,7 +6,7 @@ authors = [
     { name = "Philipp Schmid", email = "schmidphilipp1995@gmail.com" },
 ]
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "langgraph>=0.2.6",
@@ -19,6 +19,7 @@ dependencies = [
     "langgraph-cli",
     "langgraph-api",
     "fastapi",
+    "langchain-ollama"
 ]
 
 
