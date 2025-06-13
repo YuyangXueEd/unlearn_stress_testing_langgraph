@@ -179,6 +179,14 @@ export const InputForm: React.FC<InputFormProps> = ({
                     <Cpu className="h-4 w-4 mr-2 text-purple-400" /> qwen3
                   </div>
                 </SelectItem>
+                <SelectItem
+                  value="gemma3"
+                  className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> gemma3
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

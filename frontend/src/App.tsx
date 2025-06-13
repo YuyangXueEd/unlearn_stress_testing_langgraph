@@ -175,6 +175,7 @@ export default function App() {
               onCancel={handleCancel}
               liveActivityEvents={processedEventsTimeline}
               historicalActivities={historicalActivities}
+              stripThinkBlocks={true}
             />
           )}
         </div>

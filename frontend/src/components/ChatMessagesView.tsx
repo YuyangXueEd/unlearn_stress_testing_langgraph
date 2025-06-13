@@ -134,26 +134,33 @@ const mdComponents = {
   ),
 };
 
+// Utility to remove <think>...</think> blocks from message content
+function stripThinkBlocks(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+}
+
 // Props for HumanMessageBubble
 interface HumanMessageBubbleProps {
   message: Message;
   mdComponents: typeof mdComponents;
+  stripThinkBlocks?: boolean;
 }
 
 // HumanMessageBubble Component
 const HumanMessageBubble: React.FC<HumanMessageBubbleProps> = ({
   message,
   mdComponents,
+  stripThinkBlocks: shouldStripThinkBlocks = true,
 }) => {
+  const content =
+    typeof message.content === "string"
+      ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
+      : JSON.stringify(message.content);
   return (
     <div
       className={`text-white rounded-3xl break-words min-h-7 bg-neutral-700 max-w-[100%] sm:max-w-[90%] px-4 pt-3 rounded-br-lg`}
     >
-      <ReactMarkdown components={mdComponents}>
-        {typeof message.content === "string"
-          ? message.content
-          : JSON.stringify(message.content)}
-      </ReactMarkdown>
+      <ReactMarkdown components={mdComponents}>{content}</ReactMarkdown>
     </div>
   );
 };
@@ -168,6 +175,7 @@ interface AiMessageBubbleProps {
   mdComponents: typeof mdComponents;
   handleCopy: (text: string, messageId: string) => void;
   copiedMessageId: string | null;
+  stripThinkBlocks?: boolean;
 }
 
 // AiMessageBubble Component
@@ -180,12 +188,17 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
   mdComponents,
   handleCopy,
   copiedMessageId,
+  stripThinkBlocks: shouldStripThinkBlocks = true,
 }) => {
   // Determine which activity events to show and if it's for a live loading message
   const activityForThisBubble =
     isLastMessage && isOverallLoading ? liveActivity : historicalActivity;
   const isLiveActivityForThisBubble = isLastMessage && isOverallLoading;
 
+  const content =
+    typeof message.content === "string"
+      ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
+      : JSON.stringify(message.content);
   return (
     <div className={`relative break-words flex flex-col`}>
       {activityForThisBubble && activityForThisBubble.length > 0 && (
@@ -196,18 +209,14 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
           />
         </div>
       )}
-      <ReactMarkdown components={mdComponents}>
-        {typeof message.content === "string"
-          ? message.content
-          : JSON.stringify(message.content)}
-      </ReactMarkdown>
+      <ReactMarkdown components={mdComponents}>{content}</ReactMarkdown>
       <Button
         variant="default"
         className="cursor-pointer bg-neutral-700 border-neutral-600 text-neutral-300 self-end"
         onClick={() =>
           handleCopy(
             typeof message.content === "string"
-              ? message.content
+              ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
               : JSON.stringify(message.content),
             message.id!
           )
@@ -228,6 +237,7 @@ interface ChatMessagesViewProps {
   onCancel: () => void;
   liveActivityEvents: ProcessedEvent[];
   historicalActivities: Record<string, ProcessedEvent[]>;
+  stripThinkBlocks?: boolean;
 }
 
 export function ChatMessagesView({
@@ -238,6 +248,7 @@ export function ChatMessagesView({
   onCancel,
   liveActivityEvents,
   historicalActivities,
+  stripThinkBlocks: shouldStripThinkBlocks = true,
 }: ChatMessagesViewProps) {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
@@ -268,6 +279,7 @@ export function ChatMessagesView({
                     <HumanMessageBubble
                       message={message}
                       mdComponents={mdComponents}
+                      stripThinkBlocks={shouldStripThinkBlocks}
                     />
                   ) : (
                     <AiMessageBubble
@@ -279,6 +291,7 @@ export function ChatMessagesView({
                       mdComponents={mdComponents}
                       handleCopy={handleCopy}
                       copiedMessageId={copiedMessageId}
+                      stripThinkBlocks={shouldStripThinkBlocks}
                     />
                   )}
                 </div>

@@ -2,6 +2,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
+from fastapi import HTTPException
 
 from dotenv import load_dotenv
 from duckduckgo_search import DDGS
