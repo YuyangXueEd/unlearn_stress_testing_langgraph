@@ -17,7 +17,7 @@ Instructions:
 - Query should ensure that the most current information is gathered. The current date is {current_date}.
 
 Format: 
-- Format your response as a JSON object with ALL three of these exact keys:
+- Format your response as a JSON object with ALL two of these exact keys:
    - "rationale": Brief explanation of why these queries are relevant
    - "query": A list of search queries
 
@@ -87,7 +87,7 @@ Instructions:
 - You have access to all the information gathered from the previous steps.
 - You have access to the user's question.
 - Generate a high-quality answer to the user's question based on the provided summaries and the user's question.
-- you MUST include all the citations from the summaries in the answer correctly.
+- Include the sources you used from the Summaries in the answer correctly, use markdown format (e.g. [apnews](https://vertexaisearch.cloud.google.com/id/1-0)). THIS IS A MUST.
 
 User Context:
 - {research_topic}

@@ -8,8 +8,6 @@ from typing_extensions import Annotated
 
 
 import operator
-from dataclasses import dataclass, field
-from typing_extensions import Annotated
 
 
 class OverallState(TypedDict):
@@ -37,7 +35,7 @@ class Query(TypedDict):
 
 
 class QueryGenerationState(TypedDict):
-    query_list: list[Query]
+    search_query: list[Query]
 
 
 class WebSearchState(TypedDict):
