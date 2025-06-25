@@ -16,6 +16,8 @@ interface InputFormProps {
   onCancel: () => void;
   isLoading: boolean;
   hasHistory: boolean;
+  model: string;
+  setModel: (model: string) => void;
 }
 
 export const InputForm: React.FC<InputFormProps> = ({
@@ -23,10 +25,11 @@ export const InputForm: React.FC<InputFormProps> = ({
   onCancel,
   isLoading,
   hasHistory,
+  model,
+  setModel,
 }) => {
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
-  const [model, setModel] = useState("qwen3");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

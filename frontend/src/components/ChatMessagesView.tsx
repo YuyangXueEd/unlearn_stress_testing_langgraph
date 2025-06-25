@@ -240,6 +240,8 @@ interface ChatMessagesViewProps {
   liveActivityEvents: ProcessedEvent[];
   historicalActivities: Record<string, ProcessedEvent[]>;
   stripThinkBlocks?: boolean;
+  model: string;
+  setModel: (model: string) => void;
 }
 
 export function ChatMessagesView({
@@ -251,6 +253,8 @@ export function ChatMessagesView({
   liveActivityEvents,
   historicalActivities,
   stripThinkBlocks: shouldStripThinkBlocks = true,
+  model,
+  setModel
 }: ChatMessagesViewProps) {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
@@ -329,6 +333,8 @@ export function ChatMessagesView({
         isLoading={isLoading}
         onCancel={onCancel}
         hasHistory={messages.length > 0}
+        model={model}
+        setModel={setModel}
       />
     </div>
   );
