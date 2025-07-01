@@ -19,6 +19,8 @@ class OverallState(TypedDict):
     max_research_loops: int
     research_loop_count: int
     reasoning_model: str
+    rag_results: Annotated[list, operator.add]
+    rag_found: bool
 
 
 class ReflectionState(TypedDict):

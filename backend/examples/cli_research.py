@@ -1,7 +1,9 @@
+from dotenv import load_dotenv
 import argparse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 
+load_dotenv()
 
 def main() -> None:
     """Run the research agent from the command line."""
@@ -21,7 +23,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--reasoning-model",
-        default="gemini-2.5-pro-preview-05-06",
+        default="qwen3",
         help="Model for the final answer",
     )
     args = parser.parse_args()

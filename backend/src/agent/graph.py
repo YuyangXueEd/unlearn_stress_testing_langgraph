@@ -58,7 +58,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     # Ensure Ollama server is running and the model specified in 
     # configurable.query_generator_model (e.g., "qwen:7b-chat") is available.
     chat = ChatOllama(
-        model=configurable.query_generator_model, 
+        model=configurable.query_generator_model or state.get("reasoning_model"), 
         temperature=1.0, # You can adjust temperature and other parameters
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
@@ -189,7 +189,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
 
     # Initialize ChatOllama for reflection
     chat_reflection = ChatOllama(
-        model=configurable.reflection_model,
+        model=configurable.reflection_model or state.get("reasoning_model"),
         temperature=1.0,
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
@@ -271,7 +271,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
 
     # Initialize ChatOllama for final answer
     chat_finalize = ChatOllama(
-        model=configurable.answer_model,
+        model=configurable.answer_model or state.get("reasoning_model"),
         temperature=1.0, # Adjust as needed
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
