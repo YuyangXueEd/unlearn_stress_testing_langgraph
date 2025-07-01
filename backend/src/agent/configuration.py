@@ -3,21 +3,6 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
 
-MODEL_DEFAULTS = {
-    "qwen3": {
-        "query_generator_model": "qwen3",
-        "reasoning_model": "qwen3",
-        "reflection_model": "qwen3",
-        "answer_model": "qwen3",
-    },
-    "gemma3": {
-        "query_generator_model": "gemma3",
-        "reasoning_model": "gemma3",
-        "reflection_model": "gemma3",
-        "answer_model": "gemma3",
-    },
-}
-
 
 class Configuration(BaseModel):
     """The configuration for the agent."""
@@ -62,7 +47,7 @@ class Configuration(BaseModel):
 
     @classmethod
     def from_runnable_config(
-        cls, config: Optional[RunnableConfig] = None
+        cls, config: Optional[RunnableConfig] = None, base_model: Optional[str] = None
     ) -> "Configuration":
         """Create a Configuration instance from a RunnableConfig."""
         configurable = (
@@ -77,5 +62,12 @@ class Configuration(BaseModel):
 
         # Filter out None values
         values = {k: v for k, v in raw_values.items() if v is not None}
+
+        # If base_model is provided, set all fields to it unless already set
+        model_fields = [name for name in cls.model_fields.keys() if name.endswith("_model")]
+        if base_model:
+            for field in model_fields:
+                if field not in values:
+                    values[field] = base_model
 
         return cls(**values)

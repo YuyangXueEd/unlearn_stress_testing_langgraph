@@ -50,11 +50,9 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     Returns:
         Dictionary with state update, including search_query key containing the generated queries
     """
-    configurable = Configuration.from_runnable_config(config)
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
 
-    # check for custom initial search query count
-    if state.get("initial_search_query_count") is None:
-        state["initial_search_query_count"] = configurable.number_of_initial_queries
+    initial_search_query_count = state["initial_search_query_count"] or configurable.number_of_initial_queries
     
     # Initialize ChatOllama
     # Ensure Ollama server is running and the model specified in 
@@ -72,7 +70,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     formatted_prompt = query_writer_instructions.format(
         current_date=current_date,
         research_topic=get_research_topic(state["messages"]),
-        number_queries=state["initial_search_query_count"],
+        number_queries=initial_search_query_count,
     )
     # Generate the search queries
     result = structured_llm.invoke(formatted_prompt)
@@ -132,7 +130,6 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     Returns:
         Dictionary with state update, including sources_gathered, research_loop_count, and web_research_results
     """
-    configurable = Configuration.from_runnable_config(config)
     query = state["search_query"]
 
     search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
@@ -178,10 +175,9 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     Returns:
         Dictionary with state update, including search_query key containing the generated follow-up query
     """
-    configurable = Configuration.from_runnable_config(config)
-    # Increment the research loop count and get the reasoning model
-    state["research_loop_count"] = state.get("research_loop_count", 0) + 1
-    reasoning_model = state.get("reasoning_model") or configurable.reflection_model
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+
+    research_loop_count = state.get("research_loop_count", 0) + 1
 
     # Format the prompt
     current_date = get_current_date()
@@ -193,7 +189,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
 
     # Initialize ChatOllama for reflection
     chat_reflection = ChatOllama(
-        model=reasoning_model, # Ensure reasoning_model is an Ollama-compatible model name
+        model=configurable.reflection_model,
         temperature=1.0,
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
@@ -207,7 +203,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         "is_sufficient": result.is_sufficient,
         "knowledge_gap": result.knowledge_gap,
         "follow_up_queries": result.follow_up_queries,
-        "research_loop_count": state["research_loop_count"],
+        "research_loop_count": research_loop_count,
         "number_of_ran_queries": len(state["search_query"]),
     }
 
@@ -228,7 +224,8 @@ def evaluate_research(
     Returns:
         String literal indicating the next node to visit ("web_research" or "finalize_summary")
     """
-    configurable = Configuration.from_runnable_config(config)
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+
     max_research_loops = (
         state.get("max_research_loops")
         if state.get("max_research_loops") is not None
@@ -262,8 +259,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     Returns:
         Dictionary with state update, including running_summary key containing the formatted final summary with sources
     """
-    configurable = Configuration.from_runnable_config(config)
-    reasoning_model = state.get("reasoning_model") or configurable.answer_model
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
 
     # Format the prompt
     current_date = get_current_date()
@@ -275,7 +271,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
 
     # Initialize ChatOllama for final answer
     chat_finalize = ChatOllama(
-        model=reasoning_model, # Ensure reasoning_model is an Ollama-compatible model name
+        model=configurable.answer_model,
         temperature=1.0, # Adjust as needed
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
