@@ -50,20 +50,11 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     Returns:
         Dictionary with state update, including search_query key containing the generated queries
     """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    configurable = Configuration.from_runnable_config(config)
 
     # check for custom initial search query count
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
-
-    # llm = HuggingFaceEndpoint( # Remove HuggingFaceEndpoint initialization
-    #     repo_id=configurable.query_generator_model,
-    #     task="text-generation",
-    #     max_new_tokens=512,
-    #     do_sample=False,
-    #     device_map="auto",
-    # )
-    # chat = ChatHuggingFace(llm=llm, verbose=True) # Remove ChatHuggingFace initialization
     
     # Initialize ChatOllama
     # Ensure Ollama server is running and the model specified in 
@@ -74,36 +65,6 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
     
-    # For structured output with Ollama, you might need to adjust the method.
-    # Ollama models often work best with JSON mode if they support it,
-    # or by explicitly asking for JSON in the prompt and then parsing.
-    # The `with_structured_output` with "function_calling" might not be directly supported
-    # or might behave differently.
-    # Option 1: Try with 'json_mode' if the Ollama model supports it
-    # structured_llm = chat.with_structured_output(SearchQueryList, json_mode=True)
-    # Option 2: Rely on prompt engineering and PydanticOutputParser (more robust for general models)
-    # from langchain.output_parsers import PydanticOutputParser
-    # parser = PydanticOutputParser(pydantic_object=SearchQueryList)
-    # query_writer_instructions_formatted = query_writer_instructions + "\\n\\n{format_instructions}\\n"
-    # formatted_prompt = query_writer_instructions_formatted.format(
-    #     current_date=current_date,
-    #     research_topic=get_research_topic(state["messages"]),
-    #     number_queries=state["initial_search_query_count"],
-    #     format_instructions=parser.get_format_instructions(),
-    # )
-    # raw_output = chat.invoke(formatted_prompt).content
-    # try:
-    #     parsed_result = parser.parse(raw_output)
-    #     result_query = parsed_result.query
-    # except Exception as e:
-    #     print(f"Failed to parse Ollama output for SearchQueryList: {e}")
-    #     print(f"Raw output: {raw_output}")
-    #     result_query = [] # Fallback
-    # return {"query_list": result_query}
-
-    # Assuming for now that with_structured_output with Ollama might work directly for some models/setups,
-    # or that you'll adapt to PydanticOutputParser as shown above if needed.
-    # If using function_calling or similar, ensure the Ollama model is fine-tuned for it.
     structured_llm = chat.with_structured_output(SearchQueryList) # Simpler call, may need json_mode or parser
 
     # Format the prompt
@@ -127,15 +88,6 @@ def continue_to_web_research(state: QueryGenerationState):
         Send("web_research", {"search_query": search_query, "id": int(idx)})
         for idx, search_query in enumerate(state["search_query"])
     ]
-
-import requests
-from bs4 import BeautifulSoup
-import urllib.parse
-
-import requests
-
-import requests
-import os
 
 DEFAULT_SEARCH_ENGINE_TIMEOUT = 100
 REFERENCE_COUNT = 5
@@ -180,6 +132,7 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     Returns:
         Dictionary with state update, including sources_gathered, research_loop_count, and web_research_results
     """
+    configurable = Configuration.from_runnable_config(config)
     query = state["search_query"]
 
     search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
@@ -225,10 +178,10 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     Returns:
         Dictionary with state update, including search_query key containing the generated follow-up query
     """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    configurable = Configuration.from_runnable_config(config)
     # Increment the research loop count and get the reasoning model
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
-    reasoning_model = state.get("reasoning_model", configurable.reflection_model)
+    reasoning_model = state.get("reasoning_model") or configurable.reflection_model
 
     # Format the prompt
     current_date = get_current_date()
@@ -237,17 +190,6 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    # llm = HuggingFacePipeline.from_model_id(
-    #     model_id=reasoning_model,  # Or your preferred Qwen LLM
-    #     task="text-generation",
-    #     pipeline_kwargs={
-    #         #"max_new_tokens": config.llm_config.get("max_new_tokens", 512), # Assuming max_new_tokens might be in config
-    #         #"top_k": config.llm_config.get("top_k", 50), # Assuming top_k might be in config
-    #         "temperature": 1.0, # Assuming temperature might be in config
-    #     },
-    #     device_map="auto",
-    # )
-    # result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
     # Initialize ChatOllama for reflection
     chat_reflection = ChatOllama(
@@ -286,7 +228,7 @@ def evaluate_research(
     Returns:
         String literal indicating the next node to visit ("web_research" or "finalize_summary")
     """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    configurable = Configuration.from_runnable_config(config)
     max_research_loops = (
         state.get("max_research_loops")
         if state.get("max_research_loops") is not None
@@ -320,7 +262,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     Returns:
         Dictionary with state update, including running_summary key containing the formatted final summary with sources
     """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    configurable = Configuration.from_runnable_config(config)
     reasoning_model = state.get("reasoning_model") or configurable.answer_model
 
     # Format the prompt
@@ -337,11 +279,20 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         temperature=1.0, # Adjust as needed
         base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
     )
-    result_content = chat_finalize.invoke(formatted_prompt).content # Get raw string content
+    result = chat_finalize.invoke(formatted_prompt)
+    # Replace the short urls with the original urls and add all used urls to the sources_gathered
+
+    unique_sources = []
+    for source in state["sources_gathered"]:
+        if source["short_url"] in result.content:
+            result.content = result.content.replace(
+                source["short_url"], source["value"]
+            )
+            unique_sources.append(source)
 
     return {
-        "messages": [AIMessage(content=result_content)],
-        "sources_gathered": state["sources_gathered"],
+        "messages": [AIMessage(content=result.content)],
+        "sources_gathered": unique_sources,
     }
 
 

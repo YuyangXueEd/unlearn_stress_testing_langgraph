@@ -1,8 +1,7 @@
 import os
 from typing import Any, Optional
-
-from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
 
 MODEL_DEFAULTS = {
     "qwen3": {
@@ -63,30 +62,16 @@ class Configuration(BaseModel):
 
     @classmethod
     def from_runnable_config(
-        cls, config: Optional[RunnableConfig] = None, base_model: Optional[str] = None
+        cls, config: Optional[RunnableConfig] = None
     ) -> "Configuration":
         """Create a Configuration instance from a RunnableConfig."""
         configurable = (
             config["configurable"] if config and "configurable" in config else {}
         )
 
-        # Try to get reasoning_model from base_model, environment, or configurable
-        reasoning_model = (
-            base_model
-            or os.environ.get("REASONING_MODEL")
-            or (configurable.get("reasoning_model"))
-        )
-
-        # Use mapping if reasoning_model is present
-        model_defaults = MODEL_DEFAULTS.get(reasoning_model, {})
-
-        # Get raw values from environment, configurable, or model_defaults
+        # Get raw values from environment or config
         raw_values: dict[str, Any] = {
-            name: (
-                os.environ.get(name.upper())
-                or configurable.get(name)
-                or model_defaults.get(name)
-            )
+            name: os.environ.get(name.upper(), configurable.get(name))
             for name in cls.model_fields.keys()
         }
 
