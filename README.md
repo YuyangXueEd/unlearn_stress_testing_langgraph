@@ -21,11 +21,11 @@ Main modifications made:
 6. Install node.js, go to the frontend directory and run ```npm install```
 7. Return to the main directory, run ```make dev```, and open ```http://localhost:5173/app/``` to use
 
-Demo 1
+## Features
 
+### Online Search with Google
 
-
-Demo 2
+### RAG Integration
 
 
 
