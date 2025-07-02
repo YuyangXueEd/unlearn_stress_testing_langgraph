@@ -167,71 +167,33 @@ def search_with_google(query: str, subscription_key: str, cx: str):
     return contexts
 
 
-def search_with_duckduckgo(query: str, max_results: int = 5):
-    """
-    Fallback search using DuckDuckGo when Google Search fails.
-    """
-    try:
-        print(f"🦆 DuckDuckGo search for: {query[:50]}...")
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-        
-        # Convert DuckDuckGo format to Google format for consistency
-        formatted_results = []
-        for result in results:
-            formatted_results.append({
-                "title": result.get("title", ""),
-                "link": result.get("href", ""),
-                "snippet": result.get("body", "")
-            })
-        
-        print(f"✅ DuckDuckGo search successful, found {len(formatted_results)} results")
-        return formatted_results
-        
-    except Exception as e:
-        print(f"💥 DuckDuckGo search failed: {e}")
-        return []
-
-
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
-    """LangGraph node that performs web research using Google Search.
-
-    Executes a web search using the Google Search API and formats the
-    results for later processing.
-
-    Args:
-        state: Current graph state containing the search query and research loop count
-        config: Configuration for the runnable, including search API settings
-
-    Returns:
-        Dictionary with state update, including sources_gathered, research_loop_count, and web_research_results
-    """
-    configurable = Configuration.from_runnable_config(config)
+    """Stubbed LangGraph node that skips real web research and returns mock data."""
     query = state["search_query"]
-
-    search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
-    # with DDGS() as ddgs:
-    #     print(query, "xxx")
-    #     results = list(ddgs.text(query, max_results=5))
-
-    results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
-
-    formatted_lines = []
-    sources_gathered = []
-    for res in results:
-        # print(res, "qqq")
-        title = res.get("title", "")
-        href = res.get("link", "")
-        body = res.get("snippet", "")
-        formatted_lines.append(f"{title}: {body} ({href})")
-        sources_gathered.append({"label": title, "short_url": href, "value": href})
-
-    modified_text = "\n".join(formatted_lines)
-
+    # The following code is commented out to avoid real API calls:
+    # configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    # search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
+    # results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
+    # formatted_lines = []
+    # sources_gathered = []
+    # for res in results:
+    #     title = res.get("title", "")
+    #     href = res.get("link", "")
+    #     body = res.get("snippet", "")
+    #     formatted_lines.append(f"{title}: {body} ({href})")
+    #     sources_gathered.append({"label": title, "short_url": href, "value": href})
+    # modified_text = "\n".join(formatted_lines)
+    # return {
+    #     "sources_gathered": sources_gathered,
+    #     "search_query": [query],
+    #     "web_research_result": [modified_text],
+    # }
+    # Return mock/fake research results to avoid API calls
+    mock_result = f"[MOCKED] No real web search performed for query: {query}"
     return {
-        "sources_gathered": sources_gathered,
+        "sources_gathered": [{"label": "Mock Source", "short_url": "https://example.com", "value": "https://example.com"}],
         "search_query": [query],
-        "web_research_result": [modified_text],
+        "web_research_result": [mock_result],
     }
 
 
