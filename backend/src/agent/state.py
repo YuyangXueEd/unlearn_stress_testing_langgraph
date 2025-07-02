@@ -13,6 +13,8 @@ import operator
 class OverallState(TypedDict):
     messages: Annotated[list, add_messages]
     search_query: Annotated[list, operator.add]
+    rag_search_query: Annotated[list, operator.add]  # RAG search queries
+    rag_search_result: Annotated[list, operator.add]  # RAG search results
     web_research_result: Annotated[list, operator.add]
     sources_gathered: Annotated[list, operator.add]
     initial_search_query_count: int

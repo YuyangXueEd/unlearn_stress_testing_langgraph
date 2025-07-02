@@ -30,56 +30,14 @@ from agent.state import (
 from agent.tools_and_schemas import Reflection, SearchQueryList
 from agent.utils import get_research_topic
 from agent.rag_utils import RAGDatabase
+from agent.rag_manager import get_rag_database
 
 load_dotenv()
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Initialize global RAG database instance
-rag_database = None
-
-def get_rag_database():
-    """Get or initialize the RAG database instance."""
-    global rag_database
-    if rag_database is None:
-        print("🔄 Initializing RAG database for the first time...")
-        logger.info("Initializing RAG database")
-        
-        # Initialize with default settings
-        rag_database = RAGDatabase(
-            persist_directory="./chroma_db",
-            collection_name="research_papers",
-            embedding_model="nomic-embed-text",
-            ollama_base_url="http://localhost:11434"
-        )
-        print("✅ RAG database instance created")
-        
-        # Auto-index papers from the paper directory if database is empty
-        if not rag_database.is_database_populated():
-            papers_dir = os.path.join("..", "paper")
-            print(f"📁 Checking for papers in: {papers_dir}")
-            
-            if os.path.exists(papers_dir):
-                print(f"📚 Indexing papers from {papers_dir}...")
-                logger.info(f"Auto-indexing papers from {papers_dir}")
-                success = rag_database.index_papers_from_directory(papers_dir)
-                if success:
-                    print("✅ Papers indexed successfully")
-                    logger.info("Papers indexed successfully")
-                else:
-                    print("⚠️  Paper indexing failed")
-                    logger.warning("Paper indexing failed")
-            else:
-                print(f"📁 Paper directory not found: {papers_dir}")
-                logger.info(f"Paper directory not found: {papers_dir}")
-        else:
-            print("📚 RAG database already contains indexed papers")
-            logger.info("RAG database already contains indexed papers")
-    else:
-        print("♻️  Using existing RAG database instance")
-        
-    return rag_database
+# RAG database access is now managed by rag_manager module
 
 
 DEFAULT_SEARCH_ENGINE_TIMEOUT = 100
@@ -103,7 +61,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     """
     configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
 
-    initial_search_query_count = state["initial_search_query_count"] or configurable.number_of_initial_queries
+    initial_search_query_count = configurable.number_of_initial_queries or state["initial_search_query_count"]
     
     # Initialize ChatOllama
     # Ensure Ollama server is running and the model specified in 
@@ -125,208 +83,10 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     )
     # Generate the search queries
     result = structured_llm.invoke(formatted_prompt)
+    print("Generated search queries:")
+    for query in result.query:
+        print(f" - {query}")
     return {"search_query": result.query}
-
-
-def continue_to_web_research(state: QueryGenerationState):
-    """LangGraph node that sends the search queries to the web research node.
-
-    This is used to spawn n number of web research nodes, one for each search query.
-    """
-    return [
-        Send("web_research", {"search_query": search_query, "id": int(idx)})
-        for idx, search_query in enumerate(state["search_query"])
-    ]
-
-DEFAULT_SEARCH_ENGINE_TIMEOUT = 100
-REFERENCE_COUNT = 5
-GOOGLE_SEARCH_ENDPOINT = "https://customsearch.googleapis.com/customsearch/v1"
-
-def search_with_google(query: str, subscription_key: str, cx: str):
-    """
-    Search with google and return the contexts.
-    """
-    params = {
-        "key": subscription_key,
-        "cx": cx,
-        "q": query,
-        "num": REFERENCE_COUNT,
-    }
-    response = requests.get(
-        GOOGLE_SEARCH_ENDPOINT, params=params, timeout=DEFAULT_SEARCH_ENGINE_TIMEOUT
-    )
-    if not response.ok:
-        print(f"{response.status_code} {response.text}")
-        raise HTTPException(response.status_code, "Search engine error.")
-    json_content = response.json()
-    try:
-        contexts = json_content["items"][:REFERENCE_COUNT]
-    except KeyError:
-        print(f"Error encountered: {json_content}")
-        return []
-    return contexts
-
-
-def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
-    """Stubbed LangGraph node that skips real web research and returns mock data."""
-    query = state["search_query"]
-    # The following code is commented out to avoid real API calls:
-    # configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
-    # search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
-    # results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
-    # formatted_lines = []
-    # sources_gathered = []
-    # for res in results:
-    #     title = res.get("title", "")
-    #     href = res.get("link", "")
-    #     body = res.get("snippet", "")
-    #     formatted_lines.append(f"{title}: {body} ({href})")
-    #     sources_gathered.append({"label": title, "short_url": href, "value": href})
-    # modified_text = "\n".join(formatted_lines)
-    # return {
-    #     "sources_gathered": sources_gathered,
-    #     "search_query": [query],
-    #     "web_research_result": [modified_text],
-    # }
-    # Return mock/fake research results to avoid API calls
-    mock_result = f"[MOCKED] No real web search performed for query: {query}"
-    return {
-        "sources_gathered": [{"label": "Mock Source", "short_url": "https://example.com", "value": "https://example.com"}],
-        "search_query": [query],
-        "web_research_result": [mock_result],
-    }
-
-
-def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
-    """LangGraph node that identifies knowledge gaps and generates potential follow-up queries.
-
-    Analyzes the current summary to identify areas for further research and generates
-    potential follow-up queries. Uses structured output to extract
-    the follow-up query in JSON format.
-
-    Args:
-        state: Current graph state containing the running summary and research topic
-        config: Configuration for the runnable, including LLM provider settings
-
-    Returns:
-        Dictionary with state update, including search_query key containing the generated follow-up query
-    """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
-
-    research_loop_count = state.get("research_loop_count", 0) + 1
-
-    # Format the prompt
-    current_date = get_current_date()
-    formatted_prompt = reflection_instructions.format(
-        current_date=current_date,
-        research_topic=get_research_topic(state["messages"]),
-        summaries="\n\n---\n\n".join(state["web_research_result"]),
-    )
-
-    # Initialize ChatOllama for reflection
-    chat_reflection = ChatOllama(
-        model=configurable.reflection_model or state.get("reasoning_model"),
-        temperature=1.0,
-        base_url="localhost:11434",
-    )
-    
-    # Assuming for now that with_structured_output with Ollama might work directly
-    structured_llm_reflection = chat_reflection.with_structured_output(Reflection)
-    result = structured_llm_reflection.invoke(formatted_prompt)
-
-    print(state)
-
-    return {
-        "is_sufficient": result.is_sufficient,
-        "knowledge_gap": result.knowledge_gap,
-        "follow_up_queries": result.follow_up_queries,
-        "research_loop_count": research_loop_count,  # Use the calculated value
-        "number_of_ran_queries": len(state["search_query"]),
-    }
-
-
-def evaluate_research(
-    state: ReflectionState,
-    config: RunnableConfig,
-) -> OverallState:
-    """LangGraph routing function that determines the next step in the research flow.
-
-    Controls the research loop by deciding whether to continue gathering information
-    or to finalize the summary based on the configured maximum number of research loops.
-
-    Args:
-        state: Current graph state containing the research loop count
-        config: Configuration for the runnable, including max_research_loops setting
-
-    Returns:
-        String literal indicating the next node to visit ("web_research" or "finalize_summary")
-    """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
-
-    max_research_loops = (
-        state.get("max_research_loops")
-        if state.get("max_research_loops") is not None
-        else configurable.max_research_loops
-    )
-    if state["is_sufficient"] or state["research_loop_count"] >= max_research_loops:
-        return "finalize_answer"
-    else:
-        return [
-            Send(
-                "web_research",
-                {
-                    "search_query": follow_up_query,
-                    "id": state["number_of_ran_queries"] + int(idx),
-                },
-            )
-            for idx, follow_up_query in enumerate(state["follow_up_queries"])
-        ]
-
-
-def finalize_answer(state: OverallState, config: RunnableConfig):
-    """LangGraph node that finalizes the research summary.
-
-    Prepares the final output by deduplicating and formatting sources, then
-    combining them with the running summary to create a well-structured
-    research report with proper citations.
-
-    Args:
-        state: Current graph state containing the running summary and sources gathered
-
-    Returns:
-        Dictionary with state update, including running_summary key containing the formatted final summary with sources
-    """
-    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
-
-    # Format the prompt
-    current_date = get_current_date()
-    formatted_prompt = answer_instructions.format(
-        current_date=current_date,
-        research_topic=get_research_topic(state["messages"]),
-        summaries="\n---\n\n".join(state["web_research_result"]),
-    )
-
-    # Initialize ChatOllama for final answer
-    chat_finalize = ChatOllama(
-        model=configurable.answer_model or state.get("reasoning_model"),
-        temperature=1.0, # Adjust as needed
-        base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
-    )
-    result = chat_finalize.invoke(formatted_prompt)
-    # Replace the short urls with the original urls and add all used urls to the sources_gathered
-
-    unique_sources = []
-    for source in state["sources_gathered"]:
-        if source["short_url"] in result.content:
-            result.content = result.content.replace(
-                source["short_url"], source["value"]
-            )
-            unique_sources.append(source)
-
-    return {
-        "messages": [AIMessage(content=result.content)],
-        "sources_gathered": unique_sources,
-    }
 
 
 def rag_search(state: QueryGenerationState, config: RunnableConfig) -> OverallState:
@@ -346,11 +106,22 @@ def rag_search(state: QueryGenerationState, config: RunnableConfig) -> OverallSt
     print("🔍 Starting RAG search...")
     logger.info("RAG search node started")
     
+    
     try:
-        print("📚 Initializing RAG database...")
+        print("📚 Getting RAG database instance...")
         rag_db = get_rag_database()
-        print("✅ RAG database initialized")
-        logger.info("RAG database initialized successfully")
+        
+        if rag_db is None:
+            print("⚠️  RAG database not initialized, will proceed to query generation")
+            logger.info("RAG database not initialized, proceeding to query generation")
+            return {
+                "rag_results": [],
+                "rag_found": False,
+                "rag_search_query": state["search_query"]
+            }
+            
+        print("✅ RAG database instance retrieved")
+        logger.info("RAG database instance retrieved successfully")
         
         # Check if database is populated
         print("🔢 Checking database population...")
@@ -358,12 +129,12 @@ def rag_search(state: QueryGenerationState, config: RunnableConfig) -> OverallSt
         print(f"📊 Database populated: {is_populated}")
         
         if not is_populated:
-            print("⚠️  RAG database is empty, will proceed to web search")
-            logger.info("RAG database is empty, proceeding to web search")
+            print("⚠️  RAG database is empty, will proceed to query generation")
+            logger.info("RAG database is empty, proceeding to query generation")
             return {
                 "rag_results": [],
                 "rag_found": False,
-                "search_query": state["search_query"]
+                "rag_search_query": state["search_query"]
             }
         
         # Show document count
@@ -449,21 +220,21 @@ def rag_search(state: QueryGenerationState, config: RunnableConfig) -> OverallSt
             print(f"🎉 RAG search successful! Found content from {len(sources_gathered)} sources")
             logger.info(f"RAG search successful: Found relevant content from {len(sources_gathered)} sources")
             result = {
-                "web_research_result": all_rag_results,
+                "rag_search_result": all_rag_results,
                 "sources_gathered": sources_gathered,
                 "rag_found": True,
-                "search_query": state["search_query"],
+                "rag_search_query": state["search_query"],
                 "research_loop_count": 0  # Initialize research loop count
             }
             print("✅ Returning RAG results for reflection")
             return result
         else:
-            print("❌ No relevant content found in RAG database, will proceed to web search")
+            print("❌ No relevant content found in RAG database, will proceed to query generation")
             logger.info("No relevant content found in RAG database")
             return {
                 "rag_results": [],
                 "rag_found": False,
-                "search_query": state["search_query"],
+                "rag_search_query": state["search_query"],
                 "research_loop_count": 0  # Initialize research loop count
             }
         
@@ -476,10 +247,247 @@ def rag_search(state: QueryGenerationState, config: RunnableConfig) -> OverallSt
         return {
             "rag_results": [],
             "rag_found": False,
-            "search_query": state["search_query"],
+            "rag_search_query": state["search_query"],
             "research_loop_count": 0  # Initialize research loop count
         }
 
+
+def continue_to_web_research(state: QueryGenerationState):
+    """LangGraph node that sends the search queries to the web research node.
+
+    This is used to spawn n number of web research nodes, one for each search query.
+    """
+    return [
+        Send("web_research", {"search_query": search_query, "id": int(idx)})
+        for idx, search_query in enumerate(state["search_query"])
+    ]
+
+
+def search_with_google(query: str, subscription_key: str, cx: str):
+    """
+    Search with google and return the contexts.
+    """
+    params = {
+        "key": subscription_key,
+        "cx": cx,
+        "q": query,
+        "num": REFERENCE_COUNT,
+    }
+    response = requests.get(
+        GOOGLE_SEARCH_ENDPOINT, params=params, timeout=DEFAULT_SEARCH_ENGINE_TIMEOUT
+    )
+    if not response.ok:
+        print(f"{response.status_code} {response.text}")
+        raise HTTPException(response.status_code, "Search engine error.")
+    json_content = response.json()
+    try:
+        contexts = json_content["items"][:REFERENCE_COUNT]
+    except KeyError:
+        print(f"Error encountered: {json_content}")
+        return []
+    return contexts
+
+
+def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
+    """Stubbed LangGraph node that skips real web research and returns mock data."""
+    query = state["search_query"]
+    # The following code is commented out to avoid real API calls:
+    # configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    # search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
+    # results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
+    # formatted_lines = []
+    # sources_gathered = []
+    # for res in results:
+    #     title = res.get("title", "")
+    #     href = res.get("link", "")
+    #     body = res.get("snippet", "")
+    #     formatted_lines.append(f"{title}: {body} ({href})")
+    #     sources_gathered.append({"label": title, "short_url": href, "value": href})
+    # modified_text = "\n".join(formatted_lines)
+    # return {
+    #     "sources_gathered": sources_gathered,
+    #     "search_query": [query],
+    #     "web_research_result": [modified_text],
+    # }
+    # Return mock/fake research results to avoid API calls
+    mock_result = f"[MOCKED] No real web search performed for query: {query}"
+    return {
+        "sources_gathered": [{"label": "Mock Source", "short_url": "https://example.com", "value": "https://example.com"}],
+        "search_query": [query],
+        "web_research_result": [mock_result],
+    }
+
+
+def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
+    """LangGraph node that identifies knowledge gaps and generates potential follow-up queries.
+
+    Analyzes the current summary to identify areas for further research and generates
+    potential follow-up queries. Uses structured output to extract
+    the follow-up query in JSON format.
+
+    Args:
+        state: Current graph state containing the running summary and research topic
+        config: Configuration for the runnable, including LLM provider settings
+
+    Returns:
+        Dictionary with state update, including search_query key containing the generated follow-up query
+    """
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+
+    research_loop_count = state.get("research_loop_count", 0) + 1
+
+    # Format the prompt
+    current_date = get_current_date()
+    
+    # Combine RAG and web research results for reflection
+    all_summaries = []
+    
+    # Add RAG results if available
+    rag_results = state.get("rag_search_result", [])
+    if rag_results:
+        print(f"📚 Including {len(rag_results)} RAG results in reflection")
+        all_summaries.extend(rag_results)
+    
+    # Add web research results if available
+    web_results = state.get("web_research_result", [])
+    if web_results:
+        print(f"🌐 Including {len(web_results)} web research results in reflection")
+        all_summaries.extend(web_results)
+    
+    if not all_summaries:
+        print("⚠️  No research results found for reflection")
+        all_summaries = ["No research results available for analysis."]
+    
+    formatted_prompt = reflection_instructions.format(
+        current_date=current_date,
+        research_topic=get_research_topic(state["messages"]),
+        summaries="\n\n---\n\n".join(all_summaries),
+    )
+
+    # Initialize ChatOllama for reflection
+    chat_reflection = ChatOllama(
+        model=configurable.reflection_model or state.get("reasoning_model"),
+        temperature=1.0,
+        base_url="localhost:11434",
+    )
+    
+    # Assuming for now that with_structured_output with Ollama might work directly
+    structured_llm_reflection = chat_reflection.with_structured_output(Reflection)
+    result = structured_llm_reflection.invoke(formatted_prompt)
+
+    print(state)
+
+    return {
+        "is_sufficient": result.is_sufficient,
+        "knowledge_gap": result.knowledge_gap,
+        "follow_up_queries": result.follow_up_queries,
+        "research_loop_count": research_loop_count,  # Use the calculated value
+        "number_of_ran_queries": len(state["search_query"]),
+    }
+
+
+def evaluate_research(
+    state: ReflectionState,
+    config: RunnableConfig,
+) -> OverallState:
+    """LangGraph routing function that determines the next step in the research flow.
+
+    Controls the research loop by deciding whether to continue gathering information
+    or to finalize the summary based on the configured maximum number of research loops.
+
+    Args:
+        state: Current graph state containing the research loop count
+        config: Configuration for the runnable, including max_research_loops setting
+
+    Returns:
+        String literal indicating the next node to visit ("web_research" or "finalize_summary")
+    """
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+
+    max_research_loops = (
+        state.get("max_research_loops")
+        if state.get("max_research_loops") is not None
+        else configurable.max_research_loops
+    )
+    if state["is_sufficient"] or state["research_loop_count"] >= max_research_loops:
+        return "finalize_answer"
+    else:
+        return [
+            Send(
+                "web_research",
+                {
+                    "search_query": follow_up_query,
+                    "id": state["number_of_ran_queries"] + int(idx),
+                },
+            )
+            for idx, follow_up_query in enumerate(state["follow_up_queries"])
+        ]
+
+
+def finalize_answer(state: OverallState, config: RunnableConfig):
+    """LangGraph node that finalizes the research summary.
+
+    Prepares the final output by deduplicating and formatting sources, then
+    combining them with the running summary to create a well-structured
+    research report with proper citations.
+
+    Args:
+        state: Current graph state containing the running summary and sources gathered
+
+    Returns:
+        Dictionary with state update, including running_summary key containing the formatted final summary with sources
+    """
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+
+    # Format the prompt
+    current_date = get_current_date()
+    
+    # Combine RAG and web research results for final answer
+    all_summaries = []
+    
+    # Add RAG results if available
+    rag_results = state.get("rag_search_result", [])
+    if rag_results:
+        print(f"📚 Including {len(rag_results)} RAG results in final answer")
+        all_summaries.extend(rag_results)
+    
+    # Add web research results if available
+    web_results = state.get("web_research_result", [])
+    if web_results:
+        print(f"🌐 Including {len(web_results)} web research results in final answer")
+        all_summaries.extend(web_results)
+    
+    if not all_summaries:
+        print("⚠️  No research results found for final answer")
+        all_summaries = ["No research results available for synthesis."]
+    
+    formatted_prompt = answer_instructions.format(
+        current_date=current_date,
+        research_topic=get_research_topic(state["messages"]),
+        summaries="\n---\n\n".join(all_summaries),
+    )
+
+    # Initialize ChatOllama for final answer
+    chat_finalize = ChatOllama(
+        model=configurable.answer_model or state.get("reasoning_model"),
+        temperature=1.0, # Adjust as needed
+        base_url="localhost:11434", # If OLLAMA_BASE_URL is set in env or Configuration
+    )
+    result = chat_finalize.invoke(formatted_prompt)
+    # Replace the short urls with the original urls and add all used urls to the sources_gathered
+
+    unique_sources = []
+    for source in state["sources_gathered"]:
+        if source["short_url"] in result.content:
+            result.content = result.content.replace(
+                source["short_url"], source["value"]
+            )
+            unique_sources.append(source)
+
+    return {
+        "messages": [AIMessage(content=result.content)],
+        "sources_gathered": unique_sources,
+    }
 
 def decide_search_strategy(state: OverallState):
     """LangGraph routing function that always proceeds to web search.
@@ -504,7 +512,7 @@ def decide_search_strategy(state: OverallState):
         print("❌ RAG found no results, searching web as primary source...")
         logger.info("RAG found no results, using web search as primary source")
     
-    search_queries = state["search_query"]
+    search_queries = state.get("rag_search_query", [])
     print(f"🌐 Creating {len(search_queries)} web search tasks")
     
     # Always return Send objects for parallel web research
