@@ -35,6 +35,19 @@ export default function App() {
           title: "Generating Search Queries",
           data: event.generate_query?.search_query?.join(", ") || "",
         };
+      } else if (event.rag_search) {
+        const sources = event.rag_search.sources_gathered || [];
+        const numSources = sources.length;
+        const uniqueLabels = [
+          ...new Set(sources.map((s: any) => s.label).filter(Boolean)),
+        ];
+        const exampleLabels = uniqueLabels.slice(0, 3).join(", ");
+        processedEvent = {
+          title: "RAG Search",
+          data: `Gathered ${numSources} sources. Related to: ${
+            exampleLabels || "N/A"
+          }.`,
+        };
       } else if (event.web_research) {
         const sources = event.web_research.sources_gathered || [];
         const numSources = sources.length;
