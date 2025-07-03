@@ -21,7 +21,8 @@ dependencies = [
     "fastapi",
     "langchain-ollama",
     "chromadb",
-    "langchain-chroma"
+    "langchain-chroma",
+    "langchain_community"
 ]
 
 
