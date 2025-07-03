@@ -17,3 +17,5 @@ ipykernel
 jupyterlab
 transformers
 langchain-ollama
+langchain-chroma
+chromadb

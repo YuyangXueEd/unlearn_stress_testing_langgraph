@@ -19,7 +19,9 @@ dependencies = [
     "langgraph-cli",
     "langgraph-api",
     "fastapi",
-    "langchain-ollama"
+    "langchain-ollama",
+    "chromadb",
+    "langchain-chroma"
 ]
 
 
