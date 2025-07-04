@@ -17,7 +17,6 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
 
 export interface ProcessedEvent {
   title: string;
@@ -148,7 +147,7 @@ export function ActivityTimeline({
         )}
       </Card>
       {reasoning && reasoning.trim() !== "" && (
-        <Card className="border-none rounded-lg mt-4" style={{ background: '#373450' }}>
+        <Card className="border-none rounded-lg mt-2 reasoning-card">
           <CardHeader>
             <CardDescription className="flex items-center justify-between">
               <div

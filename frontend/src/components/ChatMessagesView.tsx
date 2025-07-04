@@ -170,10 +170,13 @@ interface AiMessageBubbleProps {
   copiedMessageId: string | null;
 }
 
-// Utility to extract <think>...</think> block from message content
 function extractThinkBlock(text: string): string {
   const match = text.match(/<think>([\s\S]*?)<\/think>/i);
   return match ? match[1].trim() : "";
+}
+
+function removeThinkBlock(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
 }
 
 // AiMessageBubble Component
@@ -198,6 +201,11 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
       : JSON.stringify(message.content);
   const reasoning =
     typeof message.content === "string" ? extractThinkBlock(message.content) : "";
+
+  const contentWithoutThink = typeof message.content === "string"
+    ? removeThinkBlock(content)
+    : content;
+
   return (
     <div className={`relative break-words flex flex-col`}>
       {activityForThisBubble && activityForThisBubble.length > 0 && (
@@ -209,7 +217,7 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
           />
         </div>
       )}
-      <ReactMarkdown components={mdComponents}>{content}</ReactMarkdown>
+      <ReactMarkdown components={mdComponents}>{contentWithoutThink}</ReactMarkdown>
       <Button
         variant="default"
         className={`cursor-pointer bg-neutral-700 border-neutral-600 text-neutral-300 self-end ${
