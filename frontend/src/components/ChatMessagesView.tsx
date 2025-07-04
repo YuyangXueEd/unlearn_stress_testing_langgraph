@@ -199,12 +199,12 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
     typeof message.content === "string"
       ? message.content
       : JSON.stringify(message.content);
-  const reasoning =
-    typeof message.content === "string" ? extractThinkBlock(message.content) : "";
+  const contentWithoutThink = removeThinkBlock(content);
 
-  const contentWithoutThink = typeof message.content === "string"
-    ? removeThinkBlock(content)
-    : content;
+  const reasoning =
+    typeof message.content === "string"
+      ? extractThinkBlock(message.content)
+      : "";
 
   return (
     <div className={`relative break-words flex flex-col`}>
