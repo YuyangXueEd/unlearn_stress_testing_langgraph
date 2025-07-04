@@ -22,7 +22,8 @@ dependencies = [
     "langchain-ollama",
     "chromadb",
     "langchain-chroma",
-    "langchain-community"
+    "langchain-community",
+    "pypdf>=4.0.0"
 ]
 
 

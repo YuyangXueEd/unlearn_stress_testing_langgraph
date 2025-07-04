@@ -134,27 +134,20 @@ const mdComponents = {
   ),
 };
 
-// Utility to remove <think>...</think> blocks from message content
-function stripThinkBlocks(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-}
-
 // Props for HumanMessageBubble
 interface HumanMessageBubbleProps {
   message: Message;
   mdComponents: typeof mdComponents;
-  stripThinkBlocks?: boolean;
 }
 
 // HumanMessageBubble Component
 const HumanMessageBubble: React.FC<HumanMessageBubbleProps> = ({
   message,
   mdComponents,
-  stripThinkBlocks: shouldStripThinkBlocks = true,
 }) => {
   const content =
     typeof message.content === "string"
-      ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
+      ? message.content
       : JSON.stringify(message.content);
   return (
     <div
@@ -175,7 +168,15 @@ interface AiMessageBubbleProps {
   mdComponents: typeof mdComponents;
   handleCopy: (text: string, messageId: string) => void;
   copiedMessageId: string | null;
-  stripThinkBlocks?: boolean;
+}
+
+function extractThinkBlock(text: string): string {
+  const match = text.match(/<think>([\s\S]*?)<\/think>/i);
+  return match ? match[1].trim() : "";
+}
+
+function removeThinkBlock(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
 }
 
 // AiMessageBubble Component
@@ -188,7 +189,6 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
   mdComponents,
   handleCopy,
   copiedMessageId,
-  stripThinkBlocks: shouldStripThinkBlocks = true,
 }) => {
   // Determine which activity events to show and if it's for a live loading message
   const activityForThisBubble =
@@ -197,8 +197,15 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
 
   const content =
     typeof message.content === "string"
-      ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
+      ? message.content
       : JSON.stringify(message.content);
+  const contentWithoutThink = removeThinkBlock(content);
+
+  const reasoning =
+    typeof message.content === "string"
+      ? extractThinkBlock(message.content)
+      : "";
+
   return (
     <div className={`relative break-words flex flex-col`}>
       {activityForThisBubble && activityForThisBubble.length > 0 && (
@@ -206,10 +213,11 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
           <ActivityTimeline
             processedEvents={activityForThisBubble}
             isLoading={isLiveActivityForThisBubble}
+            reasoning={reasoning}
           />
         </div>
       )}
-      <ReactMarkdown components={mdComponents}>{content}</ReactMarkdown>
+      <ReactMarkdown components={mdComponents}>{contentWithoutThink}</ReactMarkdown>
       <Button
         variant="default"
         className={`cursor-pointer bg-neutral-700 border-neutral-600 text-neutral-300 self-end ${
@@ -218,7 +226,7 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
         onClick={() =>
           handleCopy(
             typeof message.content === "string"
-              ? (shouldStripThinkBlocks ? stripThinkBlocks(message.content) : message.content)
+              ? message.content
               : JSON.stringify(message.content),
             message.id!
           )
@@ -239,7 +247,6 @@ interface ChatMessagesViewProps {
   onCancel: () => void;
   liveActivityEvents: ProcessedEvent[];
   historicalActivities: Record<string, ProcessedEvent[]>;
-  stripThinkBlocks?: boolean;
   model: string;
   setModel: (model: string) => void;
 }
@@ -252,7 +259,6 @@ export function ChatMessagesView({
   onCancel,
   liveActivityEvents,
   historicalActivities,
-  stripThinkBlocks: shouldStripThinkBlocks = true,
   model,
   setModel
 }: ChatMessagesViewProps) {
@@ -284,7 +290,6 @@ export function ChatMessagesView({
                     <HumanMessageBubble
                       message={message}
                       mdComponents={mdComponents}
-                      stripThinkBlocks={shouldStripThinkBlocks}
                     />
                   ) : (
                     <AiMessageBubble
@@ -296,7 +301,6 @@ export function ChatMessagesView({
                       mdComponents={mdComponents}
                       handleCopy={handleCopy}
                       copiedMessageId={copiedMessageId}
-                      stripThinkBlocks={shouldStripThinkBlocks}
                     />
                   )}
                 </div>
@@ -307,7 +311,6 @@ export function ChatMessagesView({
             (messages.length === 0 ||
               messages[messages.length - 1].type === "human") && (
               <div className="flex items-start gap-3 mt-3">
-                {" "}
                 {/* AI message row structure */}
                 <div className="relative group max-w-[85%] md:max-w-[80%] rounded-xl p-3 shadow-sm break-words bg-neutral-800 text-neutral-100 rounded-bl-none w-full min-h-[56px]">
                   {liveActivityEvents.length > 0 ? (
