@@ -83,9 +83,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     )
     # Generate the search queries
     result = structured_llm.invoke(formatted_prompt)
-    print("Generated search queries:")
-    for query in result.query:
-        print(f" - {query}")
+    
     return {"search_query": result.query}
 
 

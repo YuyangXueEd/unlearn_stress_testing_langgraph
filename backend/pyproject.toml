@@ -22,7 +22,7 @@ dependencies = [
     "langchain-ollama",
     "chromadb",
     "langchain-chroma",
-    "langchain_community"
+    "langchain-community"
 ]
 
 
