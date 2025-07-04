@@ -18,6 +18,14 @@ def get_research_topic(messages: List[AnyMessage]) -> str:
                 research_topic += f"Assistant: {message.content}\n"
     return research_topic
 
+    # Iterate through the message list in reverse order
+    # for message in reversed(messages):
+    #     # Find the first instance of HumanMessage, which is the latest user input
+    #     if isinstance(message, HumanMessage):
+    #         return message.content
+            
+    # # If no user input is found (which should theoretically not happen), return a default value
+    # return "No user input found"
 
 def resolve_urls(urls_to_resolve: List[Any], id: int) -> Dict[str, str]:
     """

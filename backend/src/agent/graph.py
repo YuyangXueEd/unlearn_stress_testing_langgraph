@@ -104,10 +104,10 @@ def rag_query(state: OverallState, config: RunnableConfig) -> OverallState:
     # Return state update with reset flags for new conversations
     return {
         "rag_search_query": result.query,
-        "rag_found": False,  # Reset for new query
-        "is_sufficient": False,  # Reset for new query  
-        "research_loop_count": 0,  # Reset loop count
-        # Clear accumulated lists for new conversations
+        "rag_found": False,  # Always reset for new query
+        "is_sufficient": False,  # Always reset for new query  
+        "research_loop_count": 0,  # Always reset loop count
+        # Only clear results if it's truly a new conversation
         "rag_search_result": [] if is_new_conversation else state.get("rag_search_result", []),
         "web_research_result": [] if is_new_conversation else state.get("web_research_result", []),
         "sources_gathered": [] if is_new_conversation else state.get("sources_gathered", []),
@@ -181,8 +181,20 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         if rag_db is None:
             print("⚠️  RAG database not initialized, will proceed to web search")
             logger.info("RAG database not initialized, proceeding to web search")
+            
+            # Record that database wasn't available
+            no_db_turn = {
+                "turn_timestamp": get_current_date(),
+                "query_count": 0,
+                "queries_used": [],
+                "results": [],
+                "sources": [],
+                "note": "RAG database not initialized"
+            }
+            
             return {
-                "rag_results": [],
+                "rag_search_result": [no_db_turn],
+                "sources_gathered": [],
                 "rag_found": False,
                 "research_loop_count": 0
             }
@@ -198,8 +210,20 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         if not is_populated:
             print("⚠️  RAG database is empty, will proceed to web search")
             logger.info("RAG database is empty, proceeding to web search")
+            
+            # Record that database was empty
+            empty_db_turn = {
+                "turn_timestamp": get_current_date(),
+                "query_count": 0,
+                "queries_used": [],
+                "results": [],
+                "sources": [],
+                "note": "RAG database is empty"
+            }
+            
             return {
-                "rag_results": [],
+                "rag_search_result": [empty_db_turn],
+                "sources_gathered": [],
                 "rag_found": False,
                 "research_loop_count": 0
             }
@@ -209,8 +233,20 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         if not rag_queries:
             print("⚠️  No RAG search queries found, will proceed to web search")
             logger.info("No RAG search queries found, proceeding to web search")
+            
+            # Record that no queries were provided
+            no_queries_turn = {
+                "turn_timestamp": get_current_date(),
+                "query_count": 0,
+                "queries_used": [],
+                "results": [],
+                "sources": [],
+                "note": "No RAG search queries provided"
+            }
+            
             return {
-                "rag_results": [],
+                "rag_search_result": [no_queries_turn],
+                "sources_gathered": [],
                 "rag_found": False,
                 "research_loop_count": 0
             }
@@ -297,9 +333,19 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         if found_relevant:
             print(f"🎉 RAG search successful! Found content from {len(sources_gathered)} sources")
             logger.info(f"RAG search successful: Found relevant content from {len(sources_gathered)} sources")
+            
+            # Structure results as a single search turn - append as one grouped result
+            search_turn_result = {
+                "turn_timestamp": get_current_date(),
+                "query_count": len(rag_queries),
+                "queries_used": [q if isinstance(q, str) else str(q) for q in rag_queries],
+                "results": all_rag_results,
+                "sources": sources_gathered
+            }
+            
             result = {
-                "rag_search_result": all_rag_results,
-                "sources_gathered": sources_gathered,
+                "rag_search_result": [search_turn_result],  # Wrap in list - will be appended to existing turns
+                "sources_gathered": sources_gathered,        # Still accumulate sources for final answer
                 "rag_found": True,
                 "research_loop_count": 0  # Initialize research loop count
             }
@@ -308,8 +354,19 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         else:
             print("❌ No relevant content found in RAG database, will proceed to web search")
             logger.info("No relevant content found in RAG database")
+            
+            # Record this as an empty search turn for historical tracking
+            empty_search_turn = {
+                "turn_timestamp": get_current_date(),
+                "query_count": len(rag_queries),
+                "queries_used": [q if isinstance(q, str) else str(q) for q in rag_queries],
+                "results": [],
+                "sources": []
+            }
+            
             return {
-                "rag_results": [],
+                "rag_search_result": [empty_search_turn],  # Record the empty search attempt
+                "sources_gathered": [],   # No sources found
                 "rag_found": False,
                 "research_loop_count": 0  # Initialize research loop count
             }
@@ -320,8 +377,20 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         import traceback
         print("Full traceback:")
         traceback.print_exc()
+        
+        # Record the failed search attempt
+        failed_search_turn = {
+            "turn_timestamp": get_current_date(),
+            "query_count": len(state.get("rag_search_query", [])),
+            "queries_used": state.get("rag_search_query", []),
+            "results": [],
+            "sources": [],
+            "error": str(e)
+        }
+        
         return {
-            "rag_results": [],
+            "rag_search_result": [failed_search_turn],  # Record the failed attempt
+            "sources_gathered": [],   # No sources due to error
             "rag_found": False,
             "research_loop_count": 0  # Initialize research loop count
         }
@@ -420,8 +489,12 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     # Add RAG results if available
     rag_results = state.get("rag_search_result", [])
     if rag_results:
-        print(f"📚 Including {len(rag_results)} RAG results in reflection")
-        all_summaries.extend(rag_results)
+        print(f"📚 Including {len(rag_results)} RAG search turns in reflection")
+        # Extract actual content from the structured search turns
+        for turn in rag_results:
+            if turn.get("results"):  # Only include turns that have actual results
+                all_summaries.extend(turn["results"])
+        print(f"📚 Total RAG content pieces: {len([r for turn in rag_results for r in turn.get('results', [])])}")
     
     # Add web research results if available
     web_results = state.get("web_research_result", [])
@@ -523,8 +596,12 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     # Add RAG results if available
     rag_results = state.get("rag_search_result", [])
     if rag_results:
-        print(f"📚 Including {len(rag_results)} RAG results in final answer")
-        all_summaries.extend(rag_results)
+        print(f"📚 Including {len(rag_results)} RAG search turns in final answer")
+        # Extract actual content from the structured search turns
+        for turn in rag_results:
+            if turn.get("results"):  # Only include turns that have actual results
+                all_summaries.extend(turn["results"])
+        print(f"📚 Total RAG content pieces: {len([r for turn in rag_results for r in turn.get('results', [])])}")
     
     # Add web research results if available
     web_results = state.get("web_research_result", [])
