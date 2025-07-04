@@ -34,6 +34,45 @@ Topic: What revenue grew more last year apple stock or the number of people buyi
 Context: {research_topic}"""
 
 
+rag_query_instructions = """Your goal is to generate search queries optimized for searching academic papers and research documents in a RAG database.
+
+Instructions:
+- Generate {number_queries} search queries specifically designed for academic/research content
+- Focus on key technical terms and concepts that would appear in academic papers
+- Use precise academic terminology and research methodologies
+- Include specific algorithms, techniques, or theoretical frameworks mentioned in the research topic
+- If the research topic contains specific paper names or titles, preserve them exactly as given - do not modify or paraphrase paper names
+- Queries should target the kind of language and concepts found in scholarly publications
+- The current date is {current_date}
+
+Format: 
+- Format your response as a JSON object with these exact keys:
+   - "rationale": Brief explanation of why these queries are optimized for academic search
+   - "query": A list of search queries using academic terminology
+
+Example:
+
+Topic: What are the latest developments in diffusion models for image generation?
+```json
+{{
+    "rationale": "These queries target technical terminology and concepts that would appear in academic papers about diffusion models, focusing on algorithmic details, architectural improvements, and evaluation metrics commonly discussed in research literature.",
+    "query": ["diffusion probabilistic models image synthesis", "denoising diffusion generative models DDPM", "score-based generative modeling", "latent diffusion models training efficiency"],
+}}
+```
+
+Example with paper name:
+
+Topic: What are the key findings from the paper "Attention Is All You Need"?
+```json
+{{
+    "rationale": "These queries preserve the exact paper title while adding related technical terms that would help find the specific paper and related work on transformer architectures.",
+    "query": ["Attention Is All You Need", "transformer architecture self-attention", "Vaswani et al transformer model"],
+}}
+```
+
+Research Topic: {research_topic}"""
+
+
 web_searcher_instructions = """Conduct targeted web searches to gather the most recent, credible information on "{research_topic}" and synthesize it into a verifiable text artifact.
 
 Instructions:
