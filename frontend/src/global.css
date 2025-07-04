@@ -74,6 +74,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --reasoning-card-bg: oklch(0.34 0.05 287.99);
+}
+
+.reasoning-card {
+  background: var(--reasoning-card-bg) !important;
 }
 
 .dark {
