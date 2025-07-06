@@ -9,6 +9,9 @@ class SearchQueryList(BaseModel):
     rationale: str = Field(
         description="A brief explanation of why these queries are relevant to the research topic."
     )
+    is_paper_search: bool = Field(
+        description="Whether this is a search for academic papers (True) or general web search (False)."
+    )
 
 
 class Reflection(BaseModel):

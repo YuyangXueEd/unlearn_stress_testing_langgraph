@@ -6,7 +6,18 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
-query_writer_instructions = """Your goal is to generate sophisticated and diverse web search queries. These queries are intended for an advanced automated web research tool capable of analyzing complex results, following links, and synthesizing information.
+query_writer_instructions = """Your goal is to generate sophisticated and diverse search queries and determine if they are for academic papers or general web search.
+
+First, analyze the research topic to determine if it is:
+1. **Academic Paper Search**: Looking for specific research papers, studies, publications, or academic content
+2. **General Web Search**: Looking for general information, news, products, or non-academic content
+
+Academic indicators include:
+- Mentions of specific paper titles (quoted or referenced)
+- Academic terms like "study", "research", "paper", "publication", "journal", "arxiv", "doi"
+- Author names with "et al."
+- Technical/scientific terminology and methodology
+- Requests for academic literature or scholarly sources
 
 Instructions:
 - Always prefer a single search query, only add another query if the original question requests multiple aspects or elements and one query is not enough.
@@ -15,19 +26,34 @@ Instructions:
 - Queries should be diverse, if the topic is broad, generate more than 1 query.
 - Don't generate multiple similar queries, 1 is enough.
 - Query should ensure that the most current information is gathered. The current date is {current_date}.
+- If academic search: Use precise academic terminology, preserve exact paper titles, include technical concepts
+- If general search: Use broader terms suitable for web search engines
 
 Format: 
-- Format your response as a JSON object with ALL two of these exact keys:
-   - "rationale": Brief explanation of why these queries are relevant
+- Format your response as a JSON object with ALL three of these exact keys:
+   - "rationale": Brief explanation of why these queries are relevant and what type of search this is
    - "query": A list of search queries
+   - "is_paper_search": true if this is an academic paper search, false for general web search
 
-Example:
+Example Academic Search:
+
+Topic: What are the key findings from the paper "Attention Is All You Need"?
+```json
+{{
+    "rationale": "This is clearly an academic paper search requesting specific findings from a named research paper. The queries preserve the exact paper title and include related technical terms for transformer architectures.",
+    "query": ["Attention Is All You Need", "transformer architecture self-attention mechanisms", "Vaswani et al transformer model findings"],
+    "is_paper_search": true
+}}
+```
+
+Example General Search:
 
 Topic: What revenue grew more last year apple stock or the number of people buying an iphone
 ```json
 {{
-    "rationale": "To answer this comparative growth question accurately, we need specific data points on Apple's stock performance and iPhone sales metrics. These queries target the precise financial information needed: company revenue trends, product-specific unit sales figures, and stock price movement over the same fiscal period for direct comparison.",
+    "rationale": "This is a general web search for comparative business/financial information. These queries target current financial data and market metrics that would be found in business news and financial reports.",
     "query": ["Apple total revenue growth fiscal year 2024", "iPhone unit sales growth fiscal year 2024", "Apple stock price growth fiscal year 2024"],
+    "is_paper_search": false
 }}
 ```
 

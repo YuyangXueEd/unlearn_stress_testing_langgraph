@@ -23,6 +23,13 @@ class OverallState(TypedDict):
     reasoning_model: str
     rag_results: Annotated[list, operator.add]
     rag_found: bool
+    # Paper search related fields
+    title: Annotated[list, operator.add]  # Detected paper titles
+    paper_found: bool  # Whether papers were found in search
+    papers_indexed: int  # Number of papers indexed into RAG
+    paper_search_attempted: bool  # Whether paper search has been attempted
+    is_paper_search: bool  # Whether current search is for papers
+    paper_search_indicators: Annotated[list, operator.add]  # List of indicators that triggered paper search
 
 
 class ReflectionState(TypedDict):
@@ -40,6 +47,8 @@ class Query(TypedDict):
 
 class QueryGenerationState(TypedDict):
     search_query: list[Query]
+    is_paper_search: bool
+    paper_search_indicators: list[str]
 
 
 class WebSearchState(TypedDict):

@@ -2,6 +2,7 @@ import os
 import requests
 import logging
 import time
+import re
 from bs4 import BeautifulSoup
 import urllib.parse
 from fastapi import HTTPException
@@ -11,6 +12,7 @@ from duckduckgo_search import DDGS
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_ollama import ChatOllama
+
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
@@ -101,12 +103,54 @@ def rag_query(state: OverallState, config: RunnableConfig) -> OverallState:
     
     print(f"🔍 Generated {len(result.query)} RAG search queries: {result.query}")
     
+    # Detect paper titles in the research topic and queries
+    detected_titles = []
+    research_topic = get_research_topic(state["messages"])
+    
+    # Look for quoted paper titles or specific patterns that indicate academic papers
+    paper_patterns = [
+        r'"([^"]+)"',  # Quoted titles
+        r'paper titled "([^"]+)"',  # "paper titled" pattern
+        r'the paper "([^"]+)"',  # "the paper" pattern
+        r'study "([^"]+)"',  # "study" pattern
+        r'work "([^"]+)"',  # "work" pattern
+        r'\b(\w+(?:\s+\w+)*)\s+et\s+al\.?',  # "Author et al." pattern (capture author)
+        r'arXiv:(\d{4}\.\d{4,5})',  # arXiv ID pattern
+    ]
+    
+    # Search in research topic
+    for pattern in paper_patterns:
+        matches = re.findall(pattern, research_topic, re.IGNORECASE)
+        for match in matches:
+            if isinstance(match, tuple):
+                match = match[0] if match[0] else match[1]
+            if len(match.strip()) > 5:  # Only consider substantial titles
+                detected_titles.append(match.strip())
+    
+    # Also check if any query looks like a paper title (longer queries with capital words)
+    for query in result.query:
+        query_text = query if isinstance(query, str) else str(query)
+        # Check if query has characteristics of a paper title
+        if (len(query_text.split()) >= 3 and 
+            any(word[0].isupper() for word in query_text.split() if len(word) > 2) and
+            not query_text.lower().startswith(('how', 'what', 'why', 'when', 'where', 'which'))):
+            detected_titles.append(query_text.strip())
+    
+    if detected_titles:
+        print(f"📄 Detected potential paper titles: {detected_titles}")
+    
     # Return state update with reset flags for new conversations
     return {
         "rag_search_query": result.query,
+        "title": detected_titles,  # Store detected titles for paper search
         "rag_found": False,  # Always reset for new query
         "is_sufficient": False,  # Always reset for new query  
         "research_loop_count": 0,  # Always reset loop count
+        "paper_found": False,  # Initialize paper search flags
+        "papers_indexed": 0,
+        "paper_search_attempted": False,  # Track if paper search has been tried
+        "is_paper_search": False,  # Initialize paper search detection
+        "paper_search_indicators": [],  # Initialize indicators list
         # Only clear results if it's truly a new conversation
         "rag_search_result": [] if is_new_conversation else state.get("rag_search_result", []),
         "web_research_result": [] if is_new_conversation else state.get("web_research_result", []),
@@ -116,17 +160,18 @@ def rag_query(state: OverallState, config: RunnableConfig) -> OverallState:
 
 
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
-    """LangGraph node that generates search queries based on the User's question.
+    """LangGraph node that generates search queries and determines if they are for academic papers.
 
     Uses the configured LLM to create optimized search queries for web research
-    based on the user's question.
+    based on the user's question. The LLM also analyzes the research topic to 
+    determine if this is an academic paper search or general web search.
 
     Args:
         state: Current graph state containing the User's question
         config: Configuration for the runnable, including LLM provider settings
 
     Returns:
-        Dictionary with state update, including search_query key containing the generated queries
+        Dictionary with state update, including search_query key and paper detection flags
     """
     configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
 
@@ -150,10 +195,25 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         research_topic=get_research_topic(state["messages"]),
         number_queries=initial_search_query_count,
     )
-    # Generate the search queries
+    # Generate the search queries and get paper search detection from LLM
     result = structured_llm.invoke(formatted_prompt)
     
-    return {"search_query": result.query}
+    # The LLM now directly determines if this is a paper search
+    is_paper_search = result.is_paper_search
+    
+    # Create indicators list based on LLM's analysis
+    paper_indicators = [f"LLM analysis: {result.rationale}"]
+    
+    if is_paper_search:
+        print(f"📄 LLM detected paper search: {result.rationale}")
+    else:
+        print(f"🌐 LLM detected general web search: {result.rationale}")
+    
+    return {
+        "search_query": result.query,
+        "is_paper_search": is_paper_search,
+        "paper_search_indicators": paper_indicators
+    }
 
 
 def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
@@ -171,7 +231,14 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         Dictionary with state update including rag_results and rag_found flags
     """
     print("🔍 Starting RAG search...")
-    logger.info("RAG search node started")
+    
+    # Check if we just indexed new papers from paper search
+    papers_indexed = state.get("papers_indexed", 0)
+    if papers_indexed > 0:
+        print(f"📚 RAG search running after indexing {papers_indexed} new papers from Google search")
+        logger.info(f"RAG search running after indexing {papers_indexed} new papers from Google search")
+    else:
+        logger.info("RAG search node started")
     
     
     try:
@@ -396,6 +463,274 @@ def rag_search(state: OverallState, config: RunnableConfig) -> OverallState:
         }
 
 
+def paper_search(state: OverallState, config: RunnableConfig) -> OverallState:
+    """LangGraph node that searches Google for academic papers and indexes them into RAG database.
+    
+    This node analyzes detected paper titles and uses Google search to find PDFs
+    and other academic content that can be indexed into the RAG database.
+    
+    Args:
+        state: Current graph state containing detected paper titles
+        config: Configuration for the runnable
+        
+    Returns:
+        Dictionary with state update including paper_found flag and indexed papers count
+    """
+    print("📚 Starting Google paper search for detected papers...")
+    logger.info("Paper search node started")
+    
+    try:
+        # Get detected paper titles and search queries
+        detected_titles = state.get("title", [])
+        search_queries = state.get("search_query", [])
+        
+        # Combine both sources for comprehensive paper search
+        titles_to_search = detected_titles.copy()
+        
+        # Also add search queries that look like paper titles
+        for query in search_queries:
+            query_text = query if isinstance(query, str) else str(query)
+            if query_text not in titles_to_search:
+                titles_to_search.append(query_text)
+        
+        if not titles_to_search:
+            print("⚠️  No paper titles or queries detected, skipping paper search")
+            return {
+                "paper_found": False,
+                "papers_indexed": 0,
+                "paper_search_attempted": True
+            }
+        
+        print(f"🔎 Searching Google for {len(titles_to_search)} detected titles: {titles_to_search}")
+        
+        # Get RAG database instance
+        rag_db = get_rag_database()
+        if rag_db is None:
+            print("⚠️  RAG database not available, cannot index new papers")
+            return {
+                "paper_found": False,
+                "papers_indexed": 0,
+                "paper_search_attempted": True
+            }
+        
+        papers_indexed = 0
+        paper_found = False
+        
+        # Check if Google Search API is available
+        try:
+            search_api_key = os.environ.get("GOOGLE_SEARCH_API_KEY")
+            search_cx = os.environ.get("GOOGLE_SEARCH_CX")
+            use_google_api = search_api_key and search_cx
+        except:
+            use_google_api = False
+        
+        for title in titles_to_search:
+            try:
+                print(f"📖 Searching for: '{title}'")
+                
+                # Format search queries to find academic papers
+                search_queries = [
+                    f'"{title}" filetype:pdf',  # Look for PDF files
+                    f'"{title}" site:arxiv.org',  # arXiv papers
+                    f'"{title}" site:scholar.google.com',  # Google Scholar
+                    f'"{title}" paper academic',  # General academic search
+                ]
+                
+                paper_urls = []
+                
+                # Try each search query
+                for query in search_queries:
+                    try:
+                        print(f"   Trying query: {query}")
+                        
+                        if use_google_api:
+                            # Use existing Google Search API
+                            results = search_with_google(query, search_api_key, search_cx)
+                            for result in results:
+                                url = result.get('link', '')
+                                title_result = result.get('title', '')
+                                snippet = result.get('snippet', '')
+                                
+                                # Check if this looks like an academic paper
+                                if any(indicator in url.lower() for indicator in ['.pdf', 'arxiv.org', 'scholar.google', 'researchgate', 'ieee.org', 'acm.org', 'springer.com']):
+                                    paper_urls.append({
+                                        'url': url,
+                                        'title': title_result,
+                                        'snippet': snippet
+                                    })
+                                    print(f"   ✅ Found potential paper: {title_result[:50]}...")
+                        else:
+                            # Fallback to DuckDuckGo if Google API not available
+                            print("   Using DuckDuckGo as fallback...")
+                            with DDGS() as ddgs:
+                                results = list(ddgs.text(query, max_results=3))
+                                
+                            for result in results:
+                                url = result.get('href', '')
+                                title_result = result.get('title', '')
+                                
+                                # Check if this looks like an academic paper
+                                if any(indicator in url.lower() for indicator in ['.pdf', 'arxiv.org', 'scholar.google', 'researchgate', 'ieee.org', 'acm.org', 'springer.com']):
+                                    paper_urls.append({
+                                        'url': url,
+                                        'title': title_result,
+                                        'snippet': result.get('body', '')
+                                    })
+                                    print(f"   ✅ Found potential paper: {title_result[:50]}...")
+                        
+                        if paper_urls:
+                            break  # Found papers, no need to try more queries
+                            
+                    except Exception as e:
+                        print(f"   ⚠️  Search query failed: {e}")
+                        continue
+                
+                if not paper_urls:
+                    print(f"❌ No papers found for: '{title}'")
+                    continue
+                
+                paper_found = True
+                print(f"✅ Found {len(paper_urls)} potential papers for '{title}'")
+                
+                # For each found paper URL, try to fetch and index content
+                for paper_info in paper_urls:
+                    try:
+                        url = paper_info['url']
+                        paper_title = paper_info['title']
+                        
+                        print(f"📄 Attempting to fetch and index: {paper_title[:50]}...")
+                        
+                        # Check if this paper is already indexed
+                        existing_results = rag_db.search_database(paper_title, k=1, score_threshold=0.8)
+                        
+                        already_exists = False
+                        for result in existing_results:
+                            if (url in result["metadata"].get("source_url", "") or 
+                                paper_title.lower() in result["content"].lower()):
+                                already_exists = True
+                                break
+                        
+                        if already_exists:
+                            print(f"⏭️  Paper already indexed: {paper_title[:40]}...")
+                            continue
+                        
+                        # Try to fetch the content
+                        content = ""
+                        try:
+                            # For PDF files, we'd need a PDF parser
+                            if url.endswith('.pdf'):
+                                print(f"   📄 PDF detected, would need PDF parsing: {url}")
+                                # For now, use the snippet as content
+                                content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
+                            else:
+                                # Try to fetch web page content
+                                print(f"   🌐 Fetching web content from: {url}")
+                                response = requests.get(url, timeout=10, headers={
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                                })
+                                if response.status_code == 200:
+                                    soup = BeautifulSoup(response.content, 'html.parser')
+                                    # Extract text content
+                                    text = soup.get_text()
+                                    # Clean up the text
+                                    lines = (line.strip() for line in text.splitlines())
+                                    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                                    content = ' '.join(chunk for chunk in chunks if chunk)
+                                    
+                                    # Limit content length
+                                    if len(content) > 10000:
+                                        content = content[:10000] + "..."
+                                else:
+                                    print(f"   ❌ Failed to fetch {url}: {response.status_code}")
+                                    content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
+                        except Exception as e:
+                            print(f"   ⚠️  Error fetching content: {e}")
+                            content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
+                        
+                        if not content.strip():
+                            print(f"   ❌ No content extracted for {paper_title[:30]}...")
+                            continue
+                        
+                        # Split content into chunks for indexing
+                        if len(content) > 2000:
+                            # Simple chunking - split by paragraphs and combine to ~1500 chars
+                            paragraphs = content.split('\n\n')
+                            chunks = []
+                            current_chunk = ""
+                            
+                            for para in paragraphs:
+                                if len(current_chunk) + len(para) > 1500 and current_chunk:
+                                    chunks.append(current_chunk.strip())
+                                    current_chunk = para
+                                else:
+                                    current_chunk += f"\n\n{para}" if current_chunk else para
+                            
+                            if current_chunk:
+                                chunks.append(current_chunk.strip())
+                        else:
+                            chunks = [content]
+                        
+                        # Create a unique source identifier
+                        source_id = f"google_paper_{hash(url) % 100000}"
+                        
+                        # Index each chunk
+                        for i, chunk in enumerate(chunks):
+                            chunk_metadata = {
+                                "filename": f"{source_id}.pdf",
+                                "title": paper_title,
+                                "source_url": url,
+                                "chunk_id": i,
+                                "source": "google_search",
+                                "search_title": title  # Original search term
+                            }
+                            
+                            # Add to RAG database
+                            rag_db.add_document(chunk, chunk_metadata)
+                        
+                        papers_indexed += 1
+                        print(f"✅ Successfully indexed: {paper_title[:40]}... ({len(chunks)} chunks)")
+                        
+                        # Limit to avoid overwhelming the system
+                        if papers_indexed >= 2:
+                            print("🛑 Reached indexing limit (2 papers per search)")
+                            break
+                        
+                    except Exception as e:
+                        print(f"❌ Error processing paper {paper_info['title'][:30]}...: {e}")
+                        logger.error(f"Error processing paper: {e}")
+                        continue
+                    
+            except Exception as e:
+                print(f"❌ Error searching for '{title}': {e}")
+                logger.error(f"Error searching for '{title}': {e}")
+                continue
+        
+        if papers_indexed > 0:
+            print(f"🎉 Successfully indexed {papers_indexed} new papers from Google search!")
+            logger.info(f"Indexed {papers_indexed} new papers from Google search")
+        else:
+            print("📚 No new papers were indexed from Google search")
+            
+        return {
+            "paper_found": paper_found,
+            "papers_indexed": papers_indexed,
+            "paper_search_attempted": True
+        }
+        
+    except Exception as e:
+        print(f"💥 Paper search failed with error: {e}")
+        logger.error(f"Paper search failed: {e}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        
+        return {
+            "paper_found": False,
+            "papers_indexed": 0,
+            "paper_search_attempted": True
+        }
+
+
 def continue_to_web_research(state: QueryGenerationState):
     """LangGraph node that sends the search queries to the web research node.
 
@@ -435,31 +770,31 @@ def search_with_google(query: str, subscription_key: str, cx: str):
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     """Stubbed LangGraph node that skips real web research and returns mock data."""
     query = state["search_query"]
-    # The following code is commented out to avoid real API calls:
-    # configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
-    # search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
-    # results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
-    # formatted_lines = []
-    # sources_gathered = []
-    # for res in results:
-    #     title = res.get("title", "")
-    #     href = res.get("link", "")
-    #     body = res.get("snippet", "")
-    #     formatted_lines.append(f"{title}: {body} ({href})")
-    #     sources_gathered.append({"label": title, "short_url": href, "value": href})
-    # modified_text = "\n".join(formatted_lines)
-    # return {
-    #     "sources_gathered": sources_gathered,
-    #     "search_query": [query],
-    #     "web_research_result": [modified_text],
-    # }
-    # Return mock/fake research results to avoid API calls
-    mock_result = f"[MOCKED] No real web search performed for query: {query}"
+    ## The following code is commented out to avoid real API calls:
+    configurable = Configuration.from_runnable_config(config, base_model=state.get("reasoning_model"))
+    search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
+    results = search_with_google(query, search_api_key, os.environ["GOOGLE_SEARCH_CX"])
+    formatted_lines = []
+    sources_gathered = []
+    for res in results:
+        title = res.get("title", "")
+        href = res.get("link", "")
+        body = res.get("snippet", "")
+        formatted_lines.append(f"{title}: {body} ({href})")
+        sources_gathered.append({"label": title, "short_url": href, "value": href})
+    modified_text = "\n".join(formatted_lines)
     return {
-        "sources_gathered": [{"label": "Mock Source", "short_url": "https://example.com", "value": "https://example.com"}],
+        "sources_gathered": sources_gathered,
         "search_query": [query],
-        "web_research_result": [mock_result],
+        "web_research_result": [modified_text],
     }
+    ## Return mock/fake research results to avoid API calls
+    # mock_result = f"[MOCKED] No real web search performed for query: {query}"
+    # return {
+    #     "sources_gathered": [{"label": "Mock Source", "short_url": "https://example.com", "value": "https://example.com"}],
+    #     "search_query": [query],
+    #     "web_research_result": [mock_result],
+    # }
 
 
 def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
@@ -645,58 +980,60 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
 def decide_after_rag_search(state: OverallState):
     """LangGraph routing function that decides next step after RAG search.
     
-    Based on our flowchart:
-    - If RAG found results: go to web query generation for supplemental search
-    - If RAG found no results: go to web query generation for primary search
+    Based on the updated flowchart:
+    - If RAG found results: go directly to reflection (skip paper search)
+    - If RAG found no results: go to generate_query for web search query generation
     
     Args:
         state: Current graph state containing RAG search results
         
     Returns:
-        String indicating next node ("generate_query")
+        String indicating next node ("reflection" or "generate_query")
     """
     rag_found = state.get("rag_found", False)
     
     if rag_found:
-        print("✅ RAG found results! Now generating web queries for supplemental search...")
-        logger.info("RAG found results, proceeding to generate web queries for supplement")
+        print("✅ RAG found results! Skipping web search and going directly to reflection...")
+        logger.info("RAG found results, skipping web search and proceeding to reflection")
+        return "reflection"
     else:
-        print("❌ RAG found no results, now generating web queries for primary search...")
-        logger.info("RAG found no results, proceeding to generate web queries as primary source")
-    
-    return "generate_query"
+        print("❌ RAG found no results, generating web search queries...")
+        logger.info("RAG found no results, proceeding to web query generation")
+        return "generate_query"
 
 
 def decide_search_strategy(state: OverallState):
-    """LangGraph routing function that proceeds to web search.
+    """LangGraph routing function that decides between paper search and web search.
     
-    Uses the web search queries generated by generate_query node to spawn
-    parallel web research tasks.
+    Based on the analysis from generate_query:
+    - If is_paper_search: go to paper_search
+    - Otherwise: spawn parallel web_research tasks
     
     Args:
-        state: Current graph state containing web search queries
+        state: Current graph state containing search type detection
         
     Returns:
-        List of Send objects for web research
+        String or list of Send objects
     """
-    rag_found = state.get("rag_found", False)
+    is_paper_search = state.get("is_paper_search", False)
+    search_indicators = state.get("paper_search_indicators", [])
     
-    if rag_found:
-        print("✅ RAG found results! Also searching web for additional information...")
-        logger.info("RAG found results, supplementing with web search")
+    if is_paper_search:
+        print(f"📄 Routing to paper search based on indicators: {', '.join(search_indicators)}")
+        logger.info(f"Routing to paper search. Indicators: {search_indicators}")
+        return "paper_search"
     else:
-        print("❌ RAG found no results, searching web as primary source...")
-        logger.info("RAG found no results, using web search as primary source")
-    
-    # Use search_query (web queries) instead of rag_search_query
-    search_queries = state.get("search_query", [])
-    print(f"🌐 Creating {len(search_queries)} web search tasks")
-    
-    # Always return Send objects for parallel web research
-    return [
-        Send("web_research", {"search_query": search_query, "id": int(idx)})
-        for idx, search_query in enumerate(search_queries)
-    ]
+        print("🌐 Routing to general web search...")
+        logger.info("Routing to general web search")
+        
+        # Spawn parallel web research tasks for each query
+        search_queries = state.get("search_query", [])
+        print(f"🌐 Creating {len(search_queries)} web search tasks")
+        
+        return [
+            Send("web_research", {"search_query": search_query, "id": int(idx)})
+            for idx, search_query in enumerate(search_queries)
+        ]
 
 
 # Create our Agent Graph
@@ -704,6 +1041,7 @@ builder = StateGraph(OverallState, config_schema=Configuration)
 
 # Define the nodes we will cycle between
 builder.add_node("rag_query", rag_query)
+builder.add_node("paper_search", paper_search)
 builder.add_node("generate_query", generate_query)
 builder.add_node("rag_search", rag_search)
 builder.add_node("web_research", web_research)
@@ -714,23 +1052,31 @@ builder.add_node("finalize_answer", finalize_answer)
 # This means that this node is the first one called
 builder.add_edge(START, "rag_query")
 
-# After generating RAG queries, search RAG database
+# After generating RAG queries, search RAG database first
 builder.add_edge("rag_query", "rag_search")
 
 # After RAG search, decide next step based on results
 builder.add_conditional_edges(
     "rag_search", 
     decide_after_rag_search, 
-    ["generate_query"]  # Always go to generate_query for web search
+    ["reflection", "generate_query"]
 )
 
-# After web query generation, go to web research
-builder.add_edge("generate_query", "web_research")
+# After query generation, decide between paper search and web search
+builder.add_conditional_edges(
+    "generate_query",
+    decide_search_strategy,
+    ["paper_search", "web_research"]
+)
 
-# Reflect on the research (from both RAG and web results)
+# After paper search, go back to web research as fallback
+builder.add_edge("paper_search", "web_research")
+
+# Reflect on the research (from RAG and potentially web results)
 builder.add_edge("web_research", "reflection")
 
-# Evaluate the research
+# From reflection, we can also get there directly from RAG if it found results
+# Evaluate the research - this handles both RAG-only and RAG+web scenarios
 builder.add_conditional_edges(
     "reflection", evaluate_research, ["web_research", "finalize_answer"]
 )
