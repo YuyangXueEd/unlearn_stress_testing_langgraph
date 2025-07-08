@@ -262,3 +262,92 @@ class RAGDatabase:
         except Exception as e:
             logger.error(f"Failed to index papers from directory {directory_path}: {e}")
             return False
+
+    def add_document(self, content: str, metadata: Dict[str, Any]) -> bool:
+        """
+        Add a single document with content and metadata to the database.
+        
+        Args:
+            content: Text content of the document
+            metadata: Metadata dictionary for the document
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not content.strip():
+                logger.warning("Empty content provided")
+                return False
+            
+            if self.vector_store is None:
+                logger.error("Vector store not initialized")
+                return False
+            
+            # Create a Document object
+            document = Document(
+                page_content=content,
+                metadata=metadata
+            )
+            
+            # Add document to the vector store
+            self.vector_store.add_documents([document])
+            logger.debug(f"Successfully added document: {metadata.get('title', 'Unknown')[:50]}...")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add document to database: {e}")
+            return False
+    
+    def download_and_index_pdf(self, url: str, save_path: str, metadata: Dict[str, Any] = None) -> bool:
+        """
+        Download a PDF from URL, save it locally, and index it into the database.
+        
+        Args:
+            url: URL of the PDF to download
+            save_path: Local path where to save the PDF
+            metadata: Additional metadata to include
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import requests
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
+            # Download the PDF
+            logger.info(f"Downloading PDF from: {url}")
+            response = requests.get(url, timeout=30, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            if response.status_code == 200:
+                # Save the PDF file
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                logger.info(f"PDF saved to: {save_path}")
+                
+                # Load and index the PDF
+                documents = self.load_pdf_documents([save_path])
+                
+                if documents:
+                    # Add additional metadata if provided
+                    if metadata:
+                        for doc in documents:
+                            doc.metadata.update(metadata)
+                    
+                    success = self.add_documents_to_database(documents)
+                    if success:
+                        logger.info(f"Successfully indexed PDF: {os.path.basename(save_path)}")
+                        return True
+                else:
+                    logger.error(f"Failed to load PDF documents from: {save_path}")
+                    return False
+            else:
+                logger.error(f"Failed to download PDF: HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to download and index PDF: {e}")
+            return False

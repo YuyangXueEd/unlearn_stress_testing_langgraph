@@ -592,13 +592,13 @@ def paper_search(state: OverallState, config: RunnableConfig) -> OverallState:
                 paper_found = True
                 print(f"✅ Found {len(paper_urls)} potential papers for '{title}'")
                 
-                # For each found paper URL, try to fetch and index content
+                # For each found paper URL, try to download and index
                 for paper_info in paper_urls:
                     try:
                         url = paper_info['url']
                         paper_title = paper_info['title']
                         
-                        print(f"📄 Attempting to fetch and index: {paper_title[:50]}...")
+                        print(f"📄 Attempting to download and index: {paper_title[:50]}...")
                         
                         # Check if this paper is already indexed
                         existing_results = rag_db.search_database(paper_title, k=1, score_threshold=0.8)
@@ -614,81 +614,77 @@ def paper_search(state: OverallState, config: RunnableConfig) -> OverallState:
                             print(f"⏭️  Paper already indexed: {paper_title[:40]}...")
                             continue
                         
-                        # Try to fetch the content
-                        content = ""
-                        try:
-                            # For PDF files, we'd need a PDF parser
-                            if url.endswith('.pdf'):
-                                print(f"   📄 PDF detected, would need PDF parsing: {url}")
-                                # For now, use the snippet as content
-                                content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
-                            else:
-                                # Try to fetch web page content
-                                print(f"   🌐 Fetching web content from: {url}")
-                                response = requests.get(url, timeout=10, headers={
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                                })
-                                if response.status_code == 200:
-                                    soup = BeautifulSoup(response.content, 'html.parser')
-                                    # Extract text content
-                                    text = soup.get_text()
-                                    # Clean up the text
-                                    lines = (line.strip() for line in text.splitlines())
-                                    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                                    content = ' '.join(chunk for chunk in chunks if chunk)
-                                    
-                                    # Limit content length
-                                    if len(content) > 10000:
-                                        content = content[:10000] + "..."
+                        # Check if this is a PDF that can be downloaded
+                        if url.endswith('.pdf') or 'arxiv.org' in url.lower():
+                            try:
+                                # Create a safe filename from the paper title
+                                safe_title = "".join(c for c in paper_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                                safe_title = safe_title[:100]  # Limit filename length
+                                
+                                # Handle arXiv URLs - convert to PDF download URL
+                                if 'arxiv.org' in url.lower() and not url.endswith('.pdf'):
+                                    # Extract arXiv ID and convert to PDF URL
+                                    import re
+                                    arxiv_match = re.search(r'arxiv\.org/abs/(\d{4}\.\d{4,5})', url)
+                                    if arxiv_match:
+                                        arxiv_id = arxiv_match.group(1)
+                                        url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+                                        print(f"   🔄 Converted arXiv URL to PDF: {url}")
+                                
+                                # Create the paper download directory
+                                # Get the backend directory path correctly
+                                backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                                paper_dir = os.path.join(backend_dir, "paper")
+                                os.makedirs(paper_dir, exist_ok=True)
+                                
+                                # Create filename with hash to avoid conflicts
+                                file_hash = hash(url) % 100000
+                                filename = f"{safe_title}_{file_hash}.pdf"
+                                save_path = os.path.join(paper_dir, filename)
+                                
+                                print(f"   📥 Downloading PDF to: {filename}")
+                                
+                                # Download and index the PDF using RAG utility
+                                additional_metadata = {
+                                    "title": paper_title,
+                                    "source_url": url,
+                                    "source": "google_search",
+                                    "search_title": title,  # Original search term
+                                    "snippet": paper_info.get('snippet', '')
+                                }
+                                
+                                success = rag_db.download_and_index_pdf(url, save_path, additional_metadata)
+                                
+                                if success:
+                                    papers_indexed += 1
+                                    print(f"✅ Successfully downloaded and indexed: {paper_title[:40]}...")
                                 else:
-                                    print(f"   ❌ Failed to fetch {url}: {response.status_code}")
-                                    content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
-                        except Exception as e:
-                            print(f"   ⚠️  Error fetching content: {e}")
-                            content = f"Paper: {paper_title}\nURL: {url}\nSnippet: {paper_info['snippet']}"
-                        
-                        if not content.strip():
-                            print(f"   ❌ No content extracted for {paper_title[:30]}...")
-                            continue
-                        
-                        # Split content into chunks for indexing
-                        if len(content) > 2000:
-                            # Simple chunking - split by paragraphs and combine to ~1500 chars
-                            paragraphs = content.split('\n\n')
-                            chunks = []
-                            current_chunk = ""
-                            
-                            for para in paragraphs:
-                                if len(current_chunk) + len(para) > 1500 and current_chunk:
-                                    chunks.append(current_chunk.strip())
-                                    current_chunk = para
-                                else:
-                                    current_chunk += f"\n\n{para}" if current_chunk else para
-                            
-                            if current_chunk:
-                                chunks.append(current_chunk.strip())
+                                    print(f"❌ Failed to download PDF: {paper_title[:40]}...")
+                                    # Fallback to web content extraction
+                                    print(f"   🔄 Falling back to web content extraction...")
+                                    content = _extract_web_content(url, paper_info, title)
+                                    if content:
+                                        success = _index_content_chunks(rag_db, content, paper_title, url, title, paper_info)
+                                        if success:
+                                            papers_indexed += 1
+                                            
+                            except Exception as e:
+                                print(f"   ⚠️  PDF download failed: {e}")
+                                # Fallback to web content extraction
+                                print(f"   🔄 Falling back to web content extraction...")
+                                content = _extract_web_content(url, paper_info, title)
+                                if content:
+                                    success = _index_content_chunks(rag_db, content, paper_title, url, title, paper_info)
+                                    if success:
+                                        papers_indexed += 1
                         else:
-                            chunks = [content]
-                        
-                        # Create a unique source identifier
-                        source_id = f"google_paper_{hash(url) % 100000}"
-                        
-                        # Index each chunk
-                        for i, chunk in enumerate(chunks):
-                            chunk_metadata = {
-                                "filename": f"{source_id}.pdf",
-                                "title": paper_title,
-                                "source_url": url,
-                                "chunk_id": i,
-                                "source": "google_search",
-                                "search_title": title  # Original search term
-                            }
-                            
-                            # Add to RAG database
-                            rag_db.add_document(chunk, chunk_metadata)
-                        
-                        papers_indexed += 1
-                        print(f"✅ Successfully indexed: {paper_title[:40]}... ({len(chunks)} chunks)")
+                            # For non-PDF URLs, extract web content
+                            print(f"   🌐 Extracting web content from: {url}")
+                            content = _extract_web_content(url, paper_info, title)
+                            if content:
+                                success = _index_content_chunks(rag_db, content, paper_title, url, title, paper_info)
+                                if success:
+                                    papers_indexed += 1
                         
                         # Limit to avoid overwhelming the system
                         if papers_indexed >= 2:
@@ -1034,6 +1030,110 @@ def decide_search_strategy(state: OverallState):
             Send("web_research", {"search_query": search_query, "id": int(idx)})
             for idx, search_query in enumerate(search_queries)
         ]
+
+
+def _extract_web_content(url: str, paper_info: dict, original_title: str) -> str:
+    """
+    Helper function to extract content from web URLs.
+    
+    Args:
+        url: URL to extract content from
+        paper_info: Paper information dictionary
+        original_title: Original search title
+        
+    Returns:
+        Extracted content string
+    """
+    try:
+        print(f"   🌐 Fetching web content from: {url}")
+        response = requests.get(url, timeout=10, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            # Extract text content
+            text = soup.get_text()
+            # Clean up the text
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            content = ' '.join(chunk for chunk in chunks if chunk)
+            
+            # Limit content length
+            if len(content) > 10000:
+                content = content[:10000] + "..."
+            return content
+        else:
+            print(f"   ❌ Failed to fetch {url}: {response.status_code}")
+            return f"Paper: {paper_info['title']}\nURL: {url}\nSnippet: {paper_info['snippet']}"
+    except Exception as e:
+        print(f"   ⚠️  Error fetching content: {e}")
+        return f"Paper: {paper_info['title']}\nURL: {url}\nSnippet: {paper_info['snippet']}"
+
+
+def _index_content_chunks(rag_db, content: str, paper_title: str, url: str, original_title: str, paper_info: dict) -> bool:
+    """
+    Helper function to split content into chunks and index them.
+    
+    Args:
+        rag_db: RAG database instance
+        content: Content to index
+        paper_title: Title of the paper
+        url: Source URL
+        original_title: Original search title
+        paper_info: Paper information dictionary
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        if not content.strip():
+            print(f"   ❌ No content to index for {paper_title[:30]}...")
+            return False
+        
+        # Split content into chunks for indexing
+        if len(content) > 2000:
+            # Simple chunking - split by paragraphs and combine to ~1500 chars
+            paragraphs = content.split('\n\n')
+            chunks = []
+            current_chunk = ""
+            
+            for para in paragraphs:
+                if len(current_chunk) + len(para) > 1500 and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = para
+                else:
+                    current_chunk += f"\n\n{para}" if current_chunk else para
+            
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+        else:
+            chunks = [content]
+        
+        # Create a unique source identifier
+        source_id = f"google_paper_{hash(url) % 100000}"
+        
+        # Index each chunk
+        for i, chunk in enumerate(chunks):
+            chunk_metadata = {
+                "filename": f"{source_id}.pdf",
+                "title": paper_title,
+                "source_url": url,
+                "chunk_id": i,
+                "source": "google_search",
+                "search_title": original_title,  # Original search term
+                "snippet": paper_info.get('snippet', '')
+            }
+            
+            # Add to RAG database
+            rag_db.add_document(chunk, chunk_metadata)
+        
+        print(f"✅ Successfully indexed: {paper_title[:40]}... ({len(chunks)} chunks)")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error indexing content chunks: {e}")
+        logger.error(f"Error indexing content chunks: {e}")
+        return False
 
 
 # Create our Agent Graph

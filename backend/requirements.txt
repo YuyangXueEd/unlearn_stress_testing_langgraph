@@ -19,3 +19,4 @@ transformers
 langchain-ollama
 langchain-chroma
 chromadb
+pymupdf
