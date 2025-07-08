@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 _rag_database = None
 
 
-async def initialize_rag_database_async(persist_directory="./chroma_db", papers_directory="../paper"):
+async def initialize_rag_database_async(persist_directory="./chroma_db", papers_directory="../../paper", code_directory="../../code"):
     """Initialize the RAG database asynchronously with specified directories.
     
     Args:
         persist_directory: Directory to store the ChromaDB database
         papers_directory: Directory containing papers to index
+        code_directory: Directory containing code to index
         
     Returns:
         RAGDatabase instance or None if initialization fails
@@ -33,7 +34,7 @@ async def initialize_rag_database_async(persist_directory="./chroma_db", papers_
     
     try:
         # Run the blocking RAG initialization in a thread pool
-        _rag_database = await asyncio.to_thread(_initialize_rag_sync, persist_directory, papers_directory)
+        _rag_database = await asyncio.to_thread(_initialize_rag_sync, persist_directory, papers_directory, code_directory)
         
         if _rag_database:
             print("🎉 RAG database initialization completed successfully!")
@@ -52,7 +53,7 @@ async def initialize_rag_database_async(persist_directory="./chroma_db", papers_
         return None
 
 
-def _initialize_rag_sync(persist_directory, papers_directory):
+def _initialize_rag_sync(persist_directory, papers_directory, code_directory):
     """Synchronous RAG initialization helper (runs in thread)."""
     try:
         # Initialize with default settings
@@ -82,9 +83,26 @@ def _initialize_rag_sync(persist_directory, papers_directory):
             else:
                 print(f"📁 Paper directory not found: {papers_directory}")
                 logger.info(f"Paper directory not found: {papers_directory}")
+            
+            # Auto-index code from the code directory
+            print(f"📁 Checking for code in: {code_directory}")
+            
+            if os.path.exists(code_directory):
+                print(f"💻 Indexing code from {code_directory}...")
+                logger.info(f"Auto-indexing code from {code_directory}")
+                success = rag_db.index_code_from_directory(code_directory)
+                if success:
+                    print("✅ Code indexed successfully")
+                    logger.info("Code indexed successfully")
+                else:
+                    print("⚠️  Code indexing failed")
+                    logger.warning("Code indexing failed")
+            else:
+                print(f"📁 Code directory not found: {code_directory}")
+                logger.info(f"Code directory not found: {code_directory}")
         else:
-            print("📚 RAG database already contains indexed papers")
-            logger.info("RAG database already contains indexed papers")
+            print("📚 RAG database already contains indexed content")
+            logger.info("RAG database already contains indexed content")
             
         return rag_db
         
@@ -96,12 +114,13 @@ def _initialize_rag_sync(persist_directory, papers_directory):
         return None
 
 
-def initialize_rag_database(persist_directory="./chroma_db", papers_directory="../paper"):
+def initialize_rag_database(persist_directory="./chroma_db", papers_directory="../../paper", code_directory="../../code"):
     """Initialize the RAG database with specified directories (synchronous version for CLI).
     
     Args:
         persist_directory: Directory to store the ChromaDB database
         papers_directory: Directory containing papers to index
+        code_directory: Directory containing code to index
         
     Returns:
         RAGDatabase instance or None if initialization fails
@@ -111,7 +130,7 @@ def initialize_rag_database(persist_directory="./chroma_db", papers_directory=".
     print("🚀 Initializing RAG database...")
     logger.info("Starting RAG database initialization")
     
-    _rag_database = _initialize_rag_sync(persist_directory, papers_directory)
+    _rag_database = _initialize_rag_sync(persist_directory, papers_directory, code_directory)
     
     if _rag_database:
         print("🎉 RAG database initialization completed successfully!")

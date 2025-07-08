@@ -6,18 +6,27 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
-query_writer_instructions = """Your goal is to generate sophisticated and diverse search queries and determine if they are for academic papers or general web search.
+query_writer_instructions = """Your goal is to generate sophisticated and diverse search queries for unlearning stress testing research, focusing on text-to-image stable diffusion models and determine if they are for academic papers or general web search.
 
 First, analyze the research topic to determine if it is:
-1. **Academic Paper Search**: Looking for specific research papers, studies, publications, or academic content
-2. **General Web Search**: Looking for general information, news, products, or non-academic content
+1. **Academic Paper Search**: Looking for specific research papers, studies, publications, or academic content related to machine unlearning, diffusion models, or AI safety
+2. **General Web Search**: Looking for general information, tools, datasets, or implementation details
 
 Academic indicators include:
 - Mentions of specific paper titles (quoted or referenced)
 - Academic terms like "study", "research", "paper", "publication", "journal", "arxiv", "doi"
 - Author names with "et al."
-- Technical/scientific terminology and methodology
-- Requests for academic literature or scholarly sources
+- Technical terminology: "machine unlearning", "diffusion models", "concept erasure", "model editing", "adversarial attacks"
+- Requests for academic literature or scholarly sources on AI safety and model robustness
+
+Unlearning Stress Testing Focus Areas:
+- Machine unlearning methods for diffusion models
+- Concept erasure and removal techniques
+- Adversarial attacks on unlearned models
+- Evaluation metrics for unlearning effectiveness
+- Privacy and safety in generative models
+- Model editing and fine-tuning approaches
+- Backdoor attacks and defenses in diffusion models
 
 Instructions:
 - Always prefer a single search query, only add another query if the original question requests multiple aspects or elements and one query is not enough.
@@ -37,22 +46,22 @@ Format:
 
 Example Academic Search:
 
-Topic: What are the key findings from the paper "Attention Is All You Need"?
+Topic: What are the latest methods for machine unlearning in stable diffusion models?
 ```json
 {{
-    "rationale": "This is clearly an academic paper search requesting specific findings from a named research paper. The queries preserve the exact paper title and include related technical terms for transformer architectures.",
-    "query": ["Attention Is All You Need", "transformer architecture self-attention mechanisms", "Vaswani et al transformer model findings"],
+    "rationale": "This is clearly an academic paper search requesting specific research methods for machine unlearning in diffusion models. The queries target technical terminology and recent developments in the field of AI safety and model editing.",
+    "query": ["machine unlearning stable diffusion models", "concept erasure diffusion models", "model editing text-to-image generation"],
     "is_paper_search": true
 }}
 ```
 
 Example General Search:
 
-Topic: What revenue grew more last year apple stock or the number of people buying an iphone
+Topic: What tools are available for testing unlearning in diffusion models?
 ```json
 {{
-    "rationale": "This is a general web search for comparative business/financial information. These queries target current financial data and market metrics that would be found in business news and financial reports.",
-    "query": ["Apple total revenue growth fiscal year 2024", "iPhone unit sales growth fiscal year 2024", "Apple stock price growth fiscal year 2024"],
+    "rationale": "This is a general web search for practical tools and implementations. These queries target available software, frameworks, and resources for implementing unlearning stress tests.",
+    "query": ["diffusion model unlearning tools", "stable diffusion concept removal software", "machine unlearning evaluation frameworks"],
     "is_paper_search": false
 }}
 ```
@@ -60,81 +69,139 @@ Topic: What revenue grew more last year apple stock or the number of people buyi
 Context: {research_topic}"""
 
 
-rag_query_instructions = """Your goal is to generate search queries optimized for searching academic papers and research documents in a RAG database.
+rag_query_instructions = """Your goal is to generate search queries optimized for searching BOTH academic papers/research documents AND code implementations about machine unlearning and diffusion models in a RAG database.
+
+The RAG database contains two types of content:
+1. **Academic Papers**: Research documents, papers, and theoretical content
+2. **Code Implementations**: Python files, Jupyter notebooks, and implementation code
 
 Instructions:
-- Generate {number_queries} search queries specifically designed for academic/research content
-- Focus on key technical terms and concepts that would appear in academic papers
-- Use precise academic terminology and research methodologies
+- Generate {number_queries} search queries specifically designed for unlearning stress testing research content and code implementations
+- Each query should be capable of finding relevant information in BOTH paper content AND code files
+- Focus on key technical terms that appear in both academic literature and code implementations
+- Use precise academic terminology for:
+  * Machine unlearning methodologies (e.g., "SCRUB", "SISA", "gradient ascent unlearning")
+  * Diffusion model architectures and training (e.g., "DDPM", "DDIM", "UNet", "noise scheduling")
+  * Concept erasure and removal techniques (e.g., "Erasing Concepts from Diffusion Models", "concept editing")
+  * Adversarial attacks on generative models (e.g., "membership inference", "model inversion")
+  * Model editing and fine-tuning approaches (e.g., "LoRA", "DreamBooth", "textual inversion")
+  * Privacy-preserving machine learning (e.g., "differential privacy", "federated learning")
+  * AI safety and robustness evaluation (e.g., "alignment", "safety evaluation", "red teaming")
+- Include code-specific search terms that appear in function names, class names, and comments:
+  * Function names: "erase_concept", "unlearn_model", "test_unlearning", "evaluate_concept_removal"
+  * Class implementations: "ConceptEraser", "UnlearningTrainer", "DiffusionModel", "StressTest"
+  * Algorithm implementations: "gradient_ascent", "concept_ablation", "membership_inference_attack"
+  * Testing frameworks: "pytest", "unittest", "stress_test", "evaluation_metrics"
+  * Model inference: "generate_image", "denoise", "sample", "inference_step"
+  * Utility functions: "load_model", "preprocess", "postprocess", "calculate_metrics"
 - Include specific algorithms, techniques, or theoretical frameworks mentioned in the research topic
 - If the research topic contains specific paper names or titles, preserve them exactly as given - do not modify or paraphrase paper names
-- Queries should target the kind of language and concepts found in scholarly publications
+- Queries should target both research literature and code implementation patterns
 - The current date is {current_date}
 
 Format: 
 - Format your response as a JSON object with these exact keys:
-   - "rationale": Brief explanation of why these queries are optimized for academic search
+   - "rationale": Brief explanation of why these queries are optimized for finding both research content and code implementations
    - "query": A list of search queries using academic terminology
 
-Example:
+Example 1 - Evaluation Methods:
 
-Topic: What are the latest developments in diffusion models for image generation?
+Topic: What are the latest methods for evaluating unlearning effectiveness in diffusion models?
 ```json
 {{
-    "rationale": "These queries target technical terminology and concepts that would appear in academic papers about diffusion models, focusing on algorithmic details, architectural improvements, and evaluation metrics commonly discussed in research literature.",
-    "query": ["diffusion probabilistic models image synthesis", "denoising diffusion generative models DDPM", "score-based generative modeling", "latent diffusion models training efficiency"],
+    "rationale": "These queries target technical terminology that appears in both academic papers and code implementations. They combine research concepts (evaluation metrics, membership inference) with code patterns (function names, test implementations) to find comprehensive information about unlearning assessment.",
+    "query": ["machine unlearning evaluation metrics diffusion models", "concept erasure effectiveness measurement", "unlearning verification adversarial attacks", "membership inference attacks unlearned models", "evaluate_unlearning function implementation", "test_concept_removal diffusion model code"],
 }}
 ```
 
-Example with paper name:
+Example 2 - Implementation Focus:
 
-Topic: What are the key findings from the paper "Attention Is All You Need"?
+Topic: How to implement stress testing for unlearned diffusion models?
 ```json
 {{
-    "rationale": "These queries preserve the exact paper title while adding related technical terms that would help find the specific paper and related work on transformer architectures.",
-    "query": ["Attention Is All You Need", "transformer architecture self-attention", "Vaswani et al transformer model"],
+    "rationale": "These queries combine research concepts with practical implementation details, targeting both academic knowledge about stress testing methodologies and actual code patterns for implementing robust testing frameworks.",
+    "query": ["stress testing unlearned diffusion models implementation", "adversarial attack diffusion model code", "concept erasure testing framework", "unlearning robustness evaluation script", "test_model_unlearning function", "StressTest class diffusion"],
+}}
+```
+
+Example 3 - Specific Paper + Code:
+
+Topic: What are the key findings from the paper "Erasing Concepts from Diffusion Models" and how is it implemented?
+```json
+{{
+    "rationale": "These queries preserve the exact paper title while adding related technical terms and code patterns. They target the specific research paper, related unlearning techniques, and practical implementations including function names and class structures.",
+    "query": ["Erasing Concepts from Diffusion Models", "diffusion model concept removal implementation", "stable diffusion unlearning methods", "concept_erasure function code", "erase_concept diffusion model", "ConceptEraser class"],
+}}
+```
+
+Example 4 - Algorithm + Implementation:
+
+Topic: What are the most effective gradient-based unlearning algorithms for diffusion models?
+```json
+{{
+    "rationale": "These queries target both theoretical knowledge about gradient-based unlearning algorithms and their practical implementations, including specific algorithm names, optimization techniques, and code patterns for gradient manipulation.",
+    "query": ["gradient ascent unlearning diffusion models", "SCRUB algorithm implementation", "gradient_ascent_unlearning function", "unlearning optimizer diffusion", "negative gradient training code", "UnlearningTrainer class"],
 }}
 ```
 
 Research Topic: {research_topic}"""
 
 
-web_searcher_instructions = """Conduct targeted web searches to gather the most recent, credible information on "{research_topic}" and synthesize it into a verifiable text artifact.
+web_searcher_instructions = """Conduct targeted web searches to gather the most recent, credible information on unlearning stress testing for text-to-image stable diffusion models: "{research_topic}" and synthesize it into a verifiable text artifact.
+
+Focus Areas for Search:
+- Machine unlearning techniques and methodologies
+- Stress testing approaches for AI models
+- Concept erasure and removal in diffusion models
+- Adversarial attacks on unlearned models
+- Privacy and safety evaluation frameworks
+- Model editing and fine-tuning techniques
+- Robustness testing for generative models
 
 Instructions:
 - Query should ensure that the most current information is gathered. The current date is {current_date}.
-- Conduct multiple, diverse searches to gather comprehensive information.
+- Conduct multiple, diverse searches to gather comprehensive information about unlearning stress testing.
+- Focus on recent developments in machine unlearning for diffusion models.
+- Look for evaluation metrics, testing methodologies, and assessment frameworks.
 - Consolidate key findings while meticulously tracking the source(s) for each specific piece of information.
 - The output should be a well-written summary or report based on your search findings. 
 - Only include the information found in the search results, don't make up any information.
+- Prioritize information about stress testing vulnerabilities and unlearning effectiveness.
 
 Research Topic:
 {research_topic}
 """
 
-reflection_instructions = """You are an expert research assistant analyzing summaries about "{research_topic}".
+reflection_instructions = """You are an expert AI safety researcher analyzing summaries about unlearning stress testing for diffusion models: "{research_topic}".
 
 Instructions:
-- Identify knowledge gaps or areas that need deeper exploration and generate a follow-up query. (1 or multiple).
-- If provided summaries are sufficient to answer the user's question, don't generate a follow-up query.
-- If there is a knowledge gap, generate a follow-up query that would help expand your understanding.
-- Focus on technical details, implementation specifics, or emerging trends that weren't fully covered.
+- Identify knowledge gaps or areas that need deeper exploration for comprehensive unlearning stress testing and generate a follow-up query. (1 or multiple).
+- If provided summaries are sufficient to design and implement stress tests for the given unlearning scenario, don't generate a follow-up query.
+- If there is a knowledge gap, generate a follow-up query that would help expand understanding of:
+  * Unlearning methodologies and their limitations
+  * Stress testing techniques and attack vectors
+  * Evaluation metrics for unlearning effectiveness
+  * Implementation details for testing frameworks
+  * Vulnerability assessment approaches
+- Focus on technical details, implementation specifics, or emerging attack methods that weren't fully covered.
+- Consider if enough information is available to formulate a testable hypothesis about unlearning vulnerabilities.
 
 Requirements:
 - Ensure the follow-up query is self-contained and includes necessary context for web search.
+- Focus on actionable information that can inform stress testing strategy.
 
 Output Format:
 - Format your response as a JSON object with these exact keys:
    - "is_sufficient": true or false
-   - "knowledge_gap": Describe what information is missing or needs clarification
+   - "knowledge_gap": Describe what information is missing or needs clarification for effective stress testing
    - "follow_up_queries": Write a specific question to address this gap
 
 Example:
 ```json
 {{
-    "is_sufficient": true, // or false
-    "knowledge_gap": "The summary lacks information about performance metrics and benchmarks", // "" if is_sufficient is true
-    "follow_up_queries": ["What are typical performance benchmarks and metrics used to evaluate [specific technology]?"] // [] if is_sufficient is true
+    "is_sufficient": false,
+    "knowledge_gap": "The summary lacks specific information about adversarial attack methods to test unlearning robustness and evaluation metrics to measure unlearning effectiveness",
+    "follow_up_queries": ["What are the most effective adversarial attack methods for testing unlearning robustness in diffusion models?", "What metrics are used to evaluate the effectiveness of concept erasure in text-to-image models?"]
 }}
 ```
 
@@ -144,15 +211,26 @@ Summaries:
 {summaries}
 """
 
-answer_instructions = """Generate a high-quality answer to the user's question based on the provided summaries.
+answer_instructions = """Generate a comprehensive analysis and hypothesis for unlearning stress testing based on the provided research summaries from both academic papers and code implementations.
 
 Instructions:
 - The current date is {current_date}.
-- You are the final step of a multi-step research process, don't mention that you are the final step. 
-- You have access to all the information gathered from the previous steps.
-- You have access to the user's question.
-- Generate a high-quality answer to the user's question based on the provided summaries and the user's question.
-- Include the sources you used from the Summaries in the answer correctly, use markdown format (e.g. [apnews](https://vertexaisearch.cloud.google.com/id/1-0)). THIS IS A MUST.
+- You are an expert AI safety researcher specializing in machine unlearning and diffusion model robustness.
+- Based on the gathered research from BOTH academic literature AND code implementations, formulate a detailed hypothesis about potential vulnerabilities in the unlearning process.
+- Your response should synthesize insights from:
+  * **Academic Papers**: Theoretical foundations, research findings, and evaluation methodologies
+  * **Code Implementations**: Practical implementation details, algorithm implementations, and testing patterns
+- Your response should include:
+  1. **Summary of Findings**: Key insights from both research papers and code analysis about unlearning methods and their limitations
+  2. **Vulnerability Hypothesis**: Specific, testable hypothesis about how the unlearning might fail or be circumvented, informed by both theory and implementation details
+  3. **Stress Testing Strategy**: Proposed approach to test the hypothesis, leveraging insights from existing code patterns and research methodologies
+  4. **Expected Outcomes**: What results would confirm or refute the hypothesis based on both theoretical predictions and observed implementation behaviors
+  5. **Implementation Considerations**: Technical requirements and constraints derived from code analysis and research best practices
+
+- Include the sources you used from the Summaries in the answer correctly, use markdown format (e.g. [source](URL)). THIS IS A MUST.
+- Focus on actionable insights that can guide the development of stress testing code, combining theoretical knowledge with practical implementation patterns.
+- Ensure the hypothesis is specific enough to be implemented and tested programmatically, drawing from both academic insights and code examples.
+- When referencing code implementations, mention specific function names, class structures, or algorithmic approaches found in the summaries.
 
 User Context:
 - {research_topic}

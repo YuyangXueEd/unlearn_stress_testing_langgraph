@@ -167,3 +167,4 @@ cython_debug/
 examples/chroma_db/
 chroma_db/
 paper/
+code/

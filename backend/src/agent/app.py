@@ -37,7 +37,8 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting FastAPI application with RAG initialization...")
     await initialize_rag_database_async(
         persist_directory="chroma_db",
-        papers_directory="paper"    # Corrected path for app startup
+        papers_directory="paper",    # Corrected path for app startup
+        code_directory="code"        # Add code directory parameter
     )
     print("✅ FastAPI application startup complete")
     

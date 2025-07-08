@@ -39,7 +39,8 @@ def main() -> None:
     print("🔧 Setting up research agent...")
     initialize_rag_database(
         persist_directory="../chroma_db",  # Adjusted path for examples directory
-        papers_directory="../paper"    # Adjusted path for examples directory
+        papers_directory="../paper",    # Adjusted path for examples directory
+        code_directory="../code"        # Adjusted path for examples directory
     )
 
     state = {

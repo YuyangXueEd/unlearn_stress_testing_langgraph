@@ -351,3 +351,278 @@ class RAGDatabase:
         except Exception as e:
             logger.error(f"Failed to download and index PDF: {e}")
             return False
+    
+    def index_code_from_directory(self, directory_path: str, extensions: List[str] = None) -> bool:
+        """
+        Index Python code files, Jupyter notebooks, and Markdown documentation from a directory into the database.
+        
+        Args:
+            directory_path: Path to directory containing code files
+            extensions: List of file extensions to index (default: ['.py', '.ipynb', '.md'])
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if extensions is None:
+                extensions = ['.py', '.ipynb', '.md']
+            
+            directory = Path(directory_path)
+            if not directory.exists():
+                logger.error(f"Directory does not exist: {directory_path}")
+                return False
+            
+            # Find all code files in the directory recursively
+            code_files = []
+            for ext in extensions:
+                found_files = directory.rglob(f"*{ext}")
+                # Filter out checkpoint and cache directories
+                filtered_files = [
+                    f for f in found_files 
+                    if not any(exclude in str(f) for exclude in ['.ipynb_checkpoints', '__pycache__', '.git'])
+                ]
+                code_files.extend(filtered_files)
+            
+            if not code_files:
+                logger.warning(f"No Python, Jupyter notebook, or Markdown files found in {directory_path}")
+                return False
+            
+            logger.info(f"Found {len(code_files)} Python/Jupyter/Markdown files to index")
+            
+            # Load and process code files
+            documents = self.load_code_documents([str(f) for f in code_files])
+            
+            if not documents:
+                logger.error("No code documents were successfully loaded")
+                return False
+            
+            # Add documents to the database
+            success = self.add_documents_to_database(documents)
+            
+            if success:
+                logger.info(f"Successfully indexed {len(code_files)} Python/Jupyter/Markdown files from {directory_path}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to index code from directory {directory_path}: {e}")
+            return False
+    
+    def load_code_documents(self, file_paths: List[str]) -> List[Document]:
+        """
+        Load Python files, Jupyter notebooks, and Markdown files and split them into chunks.
+        
+        Args:
+            file_paths: List of paths to Python/Jupyter/Markdown files
+            
+        Returns:
+            List of Document objects with content and metadata
+        """
+        all_documents = []
+        
+        for file_path in file_paths:
+            try:
+                logger.info(f"Loading file: {file_path}")
+                
+                # Handle different file types
+                extension = os.path.splitext(file_path)[1].lower()
+                
+                if extension == '.ipynb':
+                    # Handle Jupyter notebooks
+                    content = self._load_jupyter_notebook(file_path)
+                    document_type = "jupyter_notebook"
+                elif extension == '.md':
+                    # Handle Markdown files
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    document_type = "markdown"
+                elif extension == '.py':
+                    # Handle Python files
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    document_type = "python_code"
+                else:
+                    logger.warning(f"Unsupported file type: {file_path}")
+                    continue
+                
+                if not content.strip():
+                    logger.warning(f"Empty file skipped: {file_path}")
+                    continue
+                
+                # Create a document with the full content for smaller files
+                if len(content) <= self.chunk_size:
+                    # For small files, keep them as one document
+                    doc = Document(
+                        page_content=content,
+                        metadata={
+                            "source": file_path,
+                            "filename": os.path.basename(file_path),
+                            "file_extension": extension,
+                            "document_type": document_type,
+                            "file_size": len(content)
+                        }
+                    )
+                    all_documents.append(doc)
+                else:
+                    # For larger files, split into chunks but preserve structure
+                    if extension == '.py':
+                        chunks = self._split_python_code(content)
+                    else:
+                        # For Jupyter and Markdown, use regular text splitting
+                        chunks = self.text_splitter.split_text(content)
+                    
+                    for i, chunk in enumerate(chunks):
+                        doc = Document(
+                            page_content=chunk,
+                            metadata={
+                                "source": file_path,
+                                "filename": os.path.basename(file_path),
+                                "file_extension": extension,
+                                "document_type": document_type,
+                                "chunk_index": i,
+                                "total_chunks": len(chunks),
+                                "file_size": len(content)
+                            }
+                        )
+                        all_documents.append(doc)
+                
+                logger.info(f"Loaded {file_path} into {len([d for d in all_documents if d.metadata['source'] == file_path])} chunks")
+                
+            except Exception as e:
+                logger.error(f"Failed to load file {file_path}: {e}")
+                continue
+        
+        logger.info(f"Total documents loaded: {len(all_documents)}")
+        return all_documents
+    
+    def _load_jupyter_notebook(self, notebook_path: str) -> str:
+        """
+        Load and extract content from a Jupyter notebook.
+        
+        Args:
+            notebook_path: Path to the Jupyter notebook file
+            
+        Returns:
+            Extracted text content from the notebook
+        """
+        try:
+            import json
+            
+            with open(notebook_path, 'r', encoding='utf-8') as f:
+                notebook = json.load(f)
+            
+            content_parts = []
+            
+            # Extract content from each cell
+            for cell in notebook.get('cells', []):
+                cell_type = cell.get('cell_type', '')
+                cell_source = cell.get('source', [])
+                
+                # Join source lines
+                if isinstance(cell_source, list):
+                    cell_content = ''.join(cell_source)
+                else:
+                    cell_content = str(cell_source)
+                
+                if cell_content.strip():
+                    # Add cell type header for context
+                    if cell_type == 'markdown':
+                        content_parts.append(f"# Markdown Cell\n{cell_content}\n")
+                    elif cell_type == 'code':
+                        content_parts.append(f"# Code Cell\n```python\n{cell_content}\n```\n")
+                    else:
+                        content_parts.append(f"# {cell_type.title()} Cell\n{cell_content}\n")
+            
+            return '\n'.join(content_parts)
+            
+        except Exception as e:
+            logger.error(f"Failed to load Jupyter notebook {notebook_path}: {e}")
+            return ""
+    
+    def _split_code_intelligently(self, content: str, file_path: str) -> List[str]:
+        """
+        Split code content intelligently for Python files only.
+        
+        Args:
+            content: Code content to split
+            file_path: Path to the file (for determining if it's Python)
+            
+        Returns:
+            List of code chunks
+        """
+        try:
+            # Only handle Python files with intelligent splitting
+            extension = os.path.splitext(file_path)[1].lower()
+            
+            if extension == '.py':
+                return self._split_python_code(content)
+            else:
+                # Fallback to regular text splitting
+                docs = self.text_splitter.split_text(content)
+                return docs
+                
+        except Exception as e:
+            logger.warning(f"Intelligent code splitting failed for {file_path}: {e}")
+            # Fallback to regular text splitting
+            docs = self.text_splitter.split_text(content)
+            return docs
+    
+    def _split_python_code(self, content: str) -> List[str]:
+        """Split Python code trying to preserve functions and classes."""
+        lines = content.split('\n')
+        chunks = []
+        current_chunk = []
+        current_size = 0
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            line_size = len(line) + 1  # +1 for newline
+            
+            # Check if this is a function or class definition
+            if line.strip().startswith(('def ', 'class ', 'async def ')):
+                # If current chunk would be too big, save it
+                if current_size + line_size > self.chunk_size and current_chunk:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                
+                # Add the function/class definition and its body
+                func_lines = [line]
+                func_size = line_size
+                i += 1
+                
+                # Get the indentation level of the definition
+                indent_level = len(line) - len(line.lstrip())
+                
+                # Add all lines that belong to this function/class
+                while i < len(lines):
+                    next_line = lines[i]
+                    
+                    # If line is empty or has greater indentation, it belongs to the function
+                    if not next_line.strip() or len(next_line) - len(next_line.lstrip()) > indent_level:
+                        func_lines.append(next_line)
+                        func_size += len(next_line) + 1
+                        i += 1
+                    else:
+                        break
+                
+                # Add the complete function/class to current chunk
+                current_chunk.extend(func_lines)
+                current_size += func_size
+            else:
+                # Regular line
+                if current_size + line_size > self.chunk_size and current_chunk:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                
+                current_chunk.append(line)
+                current_size += line_size
+                i += 1
+        
+        # Add remaining content
+        if current_chunk:
+            chunks.append('\n'.join(current_chunk))
+        
+        return chunks if chunks else [content]
