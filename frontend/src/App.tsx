@@ -30,12 +30,7 @@ export default function App() {
     messagesKey: "messages",
     onUpdateEvent: (event: any) => {
       let processedEvent: ProcessedEvent | null = null;
-      if (event.generate_query) {
-        processedEvent = {
-          title: "Generating Search Queries",
-          data: event.generate_query?.search_query?.join(", ") || "",
-        };
-      } else if (event.rag_search) {
+      if (event.rag_search) {
         const sources = event.rag_search.sources_gathered || [];
         const numSources = sources.length;
         const uniqueLabels = [
@@ -48,7 +43,20 @@ export default function App() {
             exampleLabels || "N/A"
           }.`,
         };
-      } else if (event.web_research) {
+      } else if (event.generate_query) {
+        processedEvent = {
+          title: "Generating Search Queries",
+          data: event.generate_query?.search_query?.join(", ") || "",
+        }
+      }
+      else if (event.paper_search) {
+        const papersIndexed = event.paper_search.papers_indexed ?? 0;
+        processedEvent = {
+          title: "Paper Search",
+          data: `Indexed ${papersIndexed} papers.`,
+        };
+      }
+      else if (event.web_research) {
         const sources = event.web_research.sources_gathered || [];
         const numSources = sources.length;
         const uniqueLabels = [
