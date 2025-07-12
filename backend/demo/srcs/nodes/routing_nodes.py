@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 def router_node(state: ChatState) -> ChatState:
     """
-    Router node that determines whether the user wants image generation or conversation.
+    Router node that determines the appropriate task type for the user message.
     
-    This node analyzes the user message and adds routing information to the state
-    without modifying the message flow.
+    This node analyzes the user message and routes to:
+    - image_generation: For image creation requests
+    - database_search: For research paper queries and information retrieval
+    - conversation: For general chat
     
     Args:
         state: Current chat state
@@ -31,14 +33,19 @@ def router_node(state: ChatState) -> ChatState:
             if hasattr(last_message, 'content'):
                 user_message = last_message.content
         
-        # Determine if this is an image generation request
-        is_image_request = _is_image_generation_request(user_message)
+        # Determine task type based on message content
+        if _is_image_generation_request(user_message):
+            task_type = "image_generation"
+        elif _is_database_search_request(user_message):
+            task_type = "database_search"
+        else:
+            task_type = "conversation"
         
-        logger.info(f"Router decision: {'image_generation' if is_image_request else 'conversation'} for message: {user_message[:50]}...")
+        logger.info(f"Router decision: {task_type} for message: {user_message[:50]}...")
         
         # Add routing decision to state
         return {
-            "task_type": "image_generation" if is_image_request else "conversation",
+            "task_type": task_type,
             "user_message": user_message  # Ensure user_message is in state
         }
         
@@ -49,6 +56,63 @@ def router_node(state: ChatState) -> ChatState:
             "task_type": "conversation",
             "user_message": user_message
         }
+
+
+def _is_database_search_request(message: str) -> bool:
+    """
+    Check if the user message is requesting database/paper search.
+    
+    Args:
+        message: User message to analyze
+        
+    Returns:
+        True if this appears to be a database search request
+    """
+    search_keywords = [
+        # Direct search keywords
+        "search", "find", "look for", "search for", "find information",
+        "what does the paper say", "according to the paper", "in the research",
+        "from the papers", "paper about", "research about", "study about",
+        
+        # Academic/research terms
+        "literature", "publication", "research", "study", "analysis",
+        "experiment", "methodology", "results", "findings", "conclusion",
+        "abstract", "introduction", "related work", "evaluation",
+        
+        # Question patterns about research
+        "what is", "how does", "explain", "describe", "tell me about",
+        "what are the", "how to", "why does", "when was", "who proposed",
+        
+        # Technical terms that might be in papers
+        "algorithm", "model", "method", "approach", "technique", "framework",
+        "dataset", "benchmark", "evaluation", "performance", "accuracy",
+        "neural network", "machine learning", "deep learning", "AI",
+        "artificial intelligence", "computer vision", "NLP", "natural language"
+    ]
+    
+    message_lower = message.lower()
+    
+    # First check for exact keyword matches
+    if any(keyword in message_lower for keyword in search_keywords):
+        return True
+    
+    # Check for question patterns that suggest academic inquiry
+    import re
+    
+    academic_patterns = [
+        r'\b(what|how|why|when|where|who)\s+(is|are|does|do|did|was|were)\s+.*(method|algorithm|model|approach|technique|research|study)',
+        r'\b(explain|describe|tell me about|discuss)\s+.*(method|algorithm|model|approach|technique)',
+        r'\b(paper|research|study|literature)\s+(says?|shows?|demonstrates?|proves?|suggests?)',
+        r'\baccording to\s+(the\s+)?(paper|research|study|literature)',
+        r'\bin\s+the\s+(paper|research|study|literature)',
+        r'\bwhat\s+(is|are)\s+the\s+(results?|findings?|conclusions?)',
+    ]
+    
+    for pattern in academic_patterns:
+        if re.search(pattern, message_lower):
+            return True
+    
+    return False
 
 
 def _is_image_generation_request(message: str) -> bool:

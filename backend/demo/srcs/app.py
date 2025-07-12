@@ -27,15 +27,18 @@ if parent_dir not in sys.path:
 try:
     from graph import demo_graph
     from manager import ChatbotManager
+    from nodes.database_nodes import initialize_database
 except ImportError:
     # Try with demo prefix for LangGraph CLI
     try:
         from srcs.graph import demo_graph
         from srcs.manager import ChatbotManager
+        from srcs.nodes.database_nodes import initialize_database
     except ImportError:
         # Try with relative imports
         from .graph import demo_graph
         from .manager import ChatbotManager
+        from .nodes.database_nodes import initialize_database
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +52,19 @@ chatbot_manager = ChatbotManager()
 async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
     logger.info("Starting demo application...")
+    
+    # Initialize chatbot manager
     await chatbot_manager.initialize()
+    
+    # Initialize RAG database connection
+    logger.info("Initializing ChromaDB database for RAG...")
+    try:
+        initialize_database()
+        logger.info("Database initialization complete")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        # Continue startup even if database fails
+    
     logger.info("Demo application startup complete")
     yield
     logger.info("Demo application shutting down...")
@@ -102,6 +117,9 @@ async def chat_endpoint(request: dict):
                 # Add image URL to response
                 response["image_url"] = f"/images/{filename}"
                 response["image_filename"] = filename
+        
+        # Search results are already included in the response by manager.py
+        # No additional processing needed for database search results
         
         return response
     except Exception as e:

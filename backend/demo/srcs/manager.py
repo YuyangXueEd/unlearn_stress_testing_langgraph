@@ -94,6 +94,14 @@ class ChatbotManager:
             if "tool_result" in result:
                 response_data["tool_result"] = result["tool_result"]
             
+            # Include search results if available (for database search)
+            if "search_results" in result:
+                response_data["search_results"] = result["search_results"]
+            
+            # Include reflection results if available (for reflection analysis)
+            if "reflection_result" in result:
+                response_data["reflection_result"] = result["reflection_result"]
+            
             return response_data
             
         except Exception as e:

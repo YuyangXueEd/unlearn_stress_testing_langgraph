@@ -168,5 +168,7 @@ examples/chroma_db/
 chroma_db/
 paper/
 code/
-demo/models
+demo/models/
 demo/tmps
+demo/paper
+demo/code
