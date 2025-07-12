@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph
 from state import ChatState
 from nodes.chat_nodes import chat_node
 from nodes.image_nodes import image_generation_node
-from nodes.code_nodes import code_generation_node
+from nodes.code_nodes import code_generation_node, generate, execute_and_check_code, decide_to_finish
 from nodes.database_nodes import database_search_node, reflection_node, final_answer_node
 from nodes.routing_nodes import router_node
 from nodes.edges import setup_conditional_edges
@@ -60,8 +60,11 @@ def _add_nodes(builder):
     # Add image generation node
     builder.add_node("image_generation", image_generation_node)
     
-    # Add code generation node
-    builder.add_node("code_generation", code_generation_node)
+    # Add code generation workflow nodes (3-node pattern from PDF)
+    builder.add_node("code_generation", code_generation_node)  # Entry point
+    builder.add_node("generate", generate)                    # Node 1: Generate code
+    builder.add_node("execute_and_check_code", execute_and_check_code)  # Node 2: Execute
+    builder.add_node("decide_to_finish", decide_to_finish)    # Node 3: Decide
     
     # Add database search node
     builder.add_node("database_search", database_search_node)

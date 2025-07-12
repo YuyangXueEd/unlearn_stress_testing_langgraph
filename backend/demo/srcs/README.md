@@ -1,6 +1,6 @@
-# Simple Chatbot Demo with Image Generation
+# Simple Chatbot Demo with Image Generation and Code Generation
 
-A minimal demonstration of a conversational AI assistant using LangGraph and Ollama, now with **Stable Diffusion image generation capabilities**! This demo showcases the basic structure and patterns used in the main agent, but in a simplified form for easy understanding and customization.
+A minimal demonstration of a conversational AI assistant using LangGraph and Ollama, now with **Stable Diffusion image generation** and **intelligent code generation capabilities**! This demo showcases the basic structure and patterns used in the main agent, but in a simplified form for easy understanding and customization.
 
 ## 🤖 What is this?
 
@@ -10,6 +10,8 @@ A minimal, general-purpose chatbot demo that showcases:
 - **Conversation Memory**: Maintains context across multiple exchanges
 - **Ollama Support**: Local LLM integration for privacy and control
 - **🎨 Image Generation**: Stable Diffusion v1.4 integration for creating images from text prompts
+- **💻 Code Generation**: Intelligent code generation in multiple programming languages
+- **📚 Research Database**: RAG-based search through research papers
 - **Tool Integration**: Extensible tool framework for adding new capabilities
 - **Clean Architecture**: Organized code structure following best practices
 - **Web Interface**: Simple, responsive web UI with conversation history
@@ -95,6 +97,11 @@ python run.py
 - "Make an image of a peaceful forest scene"
 - "Visualize a steampunk robot"
 
+### 💻 Code Generation Examples
+- "Write a Python script to read a CSV file"
+- "Write Python code to scrape a website"
+- "Create a Python function to sort a list"
+
 ### Multi-Round Conversations
 - "Hi, my name is Alice"
 - "What's my name?" (tests memory)
@@ -111,16 +118,13 @@ User Input → Enhanced Graph → Chat Node → Tool Detection → LLM/Tool Resp
                                   ↓
                             Tool Execution (if needed)
                                   ↓
-                         Stable Diffusion Pipeline
+                    Stable Diffusion / Code Generation / Database Search
 ```
 
 1. **Input Processing**: User message is received via web or CLI
-2. **Tool Detection**: System checks if the request requires tool usage (e.g., image generation)
-3. **Tool Execution**: If needed, appropriate tools are called (Stable Diffusion for images)
+2. **Tool Detection**: System checks if the request requires tool usage (e.g., image generation, code generation, database search)
+3. **Tool Execution**: If needed, appropriate tools are called (Stable Diffusion for images, LLM for code, ChromaDB for research)
 4. **Response Generation**: Either tool results or conversational LLM responses are returned
-2. **Graph Execution**: Simple LangGraph processes the message
-3. **LLM Generation**: Ollama model generates response
-4. **Output Formatting**: Response is formatted and returned
 
 ### Key Components
 

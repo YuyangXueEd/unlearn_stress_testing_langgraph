@@ -45,6 +45,7 @@ def router_node(state: ChatState) -> ChatState:
             task_type = "conversation"
         
         logger.info(f"Router decision: {task_type} for message: {user_message[:50]}...")
+        logger.info(f"Code generation check result: {_is_code_generation_request(user_message)}")
         
         # Add routing decision to state
         return {
@@ -228,7 +229,10 @@ def _is_code_generation_request(message: str) -> bool:
     message_lower = message.lower()
     
     # First check for exact keyword matches
-    if any(keyword in message_lower for keyword in code_keywords):
+    keyword_found = any(keyword in message_lower for keyword in code_keywords)
+    logger.info(f"Code detection - Message: '{message}', Keyword found: {keyword_found}")
+    
+    if keyword_found:
         return True
     
     # Check for programming language mentions with action words
