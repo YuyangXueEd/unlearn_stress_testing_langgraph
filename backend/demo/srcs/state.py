@@ -10,14 +10,14 @@ from langgraph.graph import add_messages
 
 
 class ChatState(TypedDict):
-    """Enhanced state for chat conversations with memory, routing, and database support."""
+    """Enhanced state for chat conversations with memory, routing, database support, and code generation."""
     messages: Annotated[List, add_messages]  # This maintains conversation history
     user_message: str
     response: str
     model_name: str
     max_response_length: int
-    tool_result: Optional[Dict[str, Any]]  # Store results from tool execution
-    task_type: Optional[str]  # Type of task: 'conversation', 'image_generation', or 'database_search'
+    tool_result: Optional[Dict[str, Any]]  # Store results from tool execution (images, code, etc.)
+    task_type: Optional[str]  # Type of task: 'conversation', 'image_generation', 'code_generation', or 'database_search'
     search_results: Optional[Dict[str, Any]]  # Store database search results
     search_iteration: int  # Track number of search iterations (max 3)
     previous_queries: List[str]  # Track previous search queries to avoid repetition

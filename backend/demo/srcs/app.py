@@ -83,6 +83,11 @@ tmps_path = Path(__file__).parent.parent / "tmps"
 tmps_path.mkdir(exist_ok=True)  # Ensure the directory exists
 app.mount("/images", StaticFiles(directory=str(tmps_path)), name="images")
 
+# Mount static files for serving generated code
+code_path = Path(__file__).parent.parent / "code"
+code_path.mkdir(exist_ok=True)  # Ensure the directory exists
+app.mount("/code", StaticFiles(directory=str(code_path)), name="code")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_chat_interface():
@@ -111,12 +116,19 @@ async def chat_endpoint(request: dict):
         if "tool_result" in response and response["tool_result"] and response["tool_result"].get("success"):
             tool_result = response["tool_result"]
             if "image_path" in tool_result:
-                # Extract filename from path
+                # Extract filename from path for images
                 image_path = Path(tool_result["image_path"])
                 filename = image_path.name
                 # Add image URL to response
                 response["image_url"] = f"/images/{filename}"
                 response["image_filename"] = filename
+            elif "file_path" in tool_result and "code" in tool_result:
+                # Extract filename from path for code files
+                code_path = Path(tool_result["file_path"])
+                filename = code_path.name
+                # Add code file URL to response
+                response["code_url"] = f"/code/{filename}"
+                response["code_filename"] = filename
         
         # Search results are already included in the response by manager.py
         # No additional processing needed for database search results
@@ -145,6 +157,15 @@ async def get_image(filename: str):
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(image_path)
+
+
+@app.get("/code/{filename}")
+async def get_code(filename: str):
+    """Serve generated code files."""
+    code_file_path = code_path / filename
+    if not code_file_path.exists():
+        raise HTTPException(status_code=404, detail="Code file not found")
+    return FileResponse(code_file_path)
 
 
 @app.get("/health")

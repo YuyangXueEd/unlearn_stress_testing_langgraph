@@ -16,6 +16,7 @@ def router_node(state: ChatState) -> ChatState:
     
     This node analyzes the user message and routes to:
     - image_generation: For image creation requests
+    - code_generation: For code writing and programming requests
     - database_search: For research paper queries and information retrieval
     - conversation: For general chat
     
@@ -36,6 +37,8 @@ def router_node(state: ChatState) -> ChatState:
         # Determine task type based on message content
         if _is_image_generation_request(user_message):
             task_type = "image_generation"
+        elif _is_code_generation_request(user_message):
+            task_type = "code_generation"
         elif _is_database_search_request(user_message):
             task_type = "database_search"
         else:
@@ -164,6 +167,102 @@ def _is_image_generation_request(message: str) -> bool:
     ]
     
     for pattern in generate_patterns:
+        if re.search(pattern, message_lower):
+            return True
+    
+    return False
+
+
+def _is_code_generation_request(message: str) -> bool:
+    """
+    Check if the user message is requesting code generation.
+    
+    Args:
+        message: User message to analyze
+        
+    Returns:
+        True if this appears to be a code generation request
+    """
+    code_keywords = [
+        # Direct code generation keywords
+        "write code", "generate code", "create code", "make code", "code",
+        "write a script", "generate a script", "create a script", "make a script",
+        "write a program", "generate a program", "create a program", "make a program",
+        "write a function", "create a function", "generate a function",
+        
+        # Code generation with "for" patterns - ENHANCED
+        "generate code for", "write code for", "create code for", "make code for",
+        "generate a script for", "write a script for", "create a script for",
+        "generate a program for", "write a program for", "create a program for",
+        "generate a function for", "write a function for", "create a function for",
+        "code for", "script for", "program for", "function for",
+        
+        # Code modification keywords
+        "write me code", "generate me code", "create me code",
+        "write me a script", "generate me a script", "create me a script",
+        "write me a program", "generate me a program", "create me a program",
+        "write me a function", "create me a function", "generate me a function",
+        
+        # Programming language specific
+        "write python", "write javascript", "write java", "write c++", "write go",
+        "python code", "javascript code", "java code", "c++ code", "go code",
+        "python script", "javascript script", "java script", "bash script",
+        
+        # Development tasks - ENHANCED
+        "build a", "develop a", "implement", "code for", "script for",
+        "programming", "algorithm", "function", "class", "module",
+        "implement a", "implement an", "solve", "calculate", "compute",
+        
+        # Mathematical operations - NEW
+        "add operation", "addition", "subtraction", "multiplication", "division",
+        "arithmetic", "calculator", "compute", "calculation",
+        
+        # Common programming patterns - ENHANCED
+        "write a web app", "create a web app", "build a web app",
+        "write an api", "create an api", "build an api",
+        "write a bot", "create a bot", "build a bot",
+        "automate", "parse", "scrape", "process data", "sort", "filter",
+        "data processing", "file handling", "database operations"
+    ]
+    
+    message_lower = message.lower()
+    
+    # First check for exact keyword matches
+    if any(keyword in message_lower for keyword in code_keywords):
+        return True
+    
+    # Check for programming language mentions with action words
+    programming_languages = [
+        "python", "javascript", "java", "c++", "cpp", "c", "go", "rust", 
+        "typescript", "php", "ruby", "swift", "kotlin", "scala", "r",
+        "sql", "html", "css", "bash", "shell", "powershell", "matlab", "julia"
+    ]
+    
+    action_words = [
+        "write", "create", "generate", "make", "build", "develop", "code", "script"
+    ]
+    
+    # Check for patterns like "write [language]" or "[language] code"
+    import re
+    
+    for lang in programming_languages:
+        for action in action_words:
+            # Pattern: "write python" or "python code"
+            if re.search(rf'\b({action}\s+{lang}|{lang}\s+(code|script))\b', message_lower):
+                return True
+    
+    # Check for specific programming task patterns
+    programming_patterns = [
+        r'\b(write|create|generate|make|build)\s+(a\s+)?(function|class|module|library|package)\b',
+        r'\b(implement|code)\s+(a\s+)?(algorithm|solution|program)\b',
+        r'\b(automate|script)\s+.*(task|process|workflow)\b',
+        r'\b(parse|scrape|extract)\s+.*(data|information|content)\b',
+        r'\b(build|create|make)\s+.*(app|application|tool|utility)\b',
+        r'\b(generate|write|create)\s+(code|script|program)\s+(for|to)\b',
+        r'\b(code|script|program)\s+(for|to)\s+.*(add|calculate|compute|process|handle)\b'
+    ]
+    
+    for pattern in programming_patterns:
         if re.search(pattern, message_lower):
             return True
     

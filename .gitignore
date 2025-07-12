@@ -201,3 +201,4 @@ cython_debug/
 
 backend/.langgraph_api
 backend/paper/
+backend/demo/models

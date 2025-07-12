@@ -26,9 +26,9 @@ def setup_conditional_edges(builder):
     Set up conditional edges for routing between conversation, image generation, and database search with reflection.
     
     This implements the architecture:
-    START -> router -> (conversation OR image_generation OR database_search) -> END
-                                                             ↓
-                                                         reflection -> (database_search OR final_answer) -> END
+    START -> router -> (conversation OR image_generation OR code_generation OR database_search) -> END
+                                                                                        ↓
+                                                                                 reflection -> (database_search OR final_answer) -> END
     
     Args:
         builder: StateGraph builder instance
@@ -43,6 +43,7 @@ def setup_conditional_edges(builder):
         {
             "conversation": "conversation",
             "image_generation": "image_generation",
+            "code_generation": "code_generation",
             "database_search": "database_search"
         }
     )
@@ -63,23 +64,24 @@ def setup_conditional_edges(builder):
     # End nodes
     builder.add_edge("conversation", END)
     builder.add_edge("image_generation", END)
+    builder.add_edge("code_generation", END)
     builder.add_edge("final_answer", END)
 
 
 def determine_task_route(state):
     """
-    Determine whether to route to conversation, image generation, or database search based on task type.
+    Determine whether to route to conversation, image generation, code generation, or database search based on task type.
     
     Args:
         state: Current chat state containing task_type
         
     Returns:
-        String indicating the next node to visit: 'conversation', 'image_generation', or 'database_search'
+        String indicating the next node to visit: 'conversation', 'image_generation', 'code_generation', or 'database_search'
     """
     task_type = state.get("task_type", "conversation")
     
     # Default to conversation if task_type is not set or unknown
-    if task_type not in ["conversation", "image_generation", "database_search"]:
+    if task_type not in ["conversation", "image_generation", "code_generation", "database_search"]:
         return "conversation"
     
     return task_type
