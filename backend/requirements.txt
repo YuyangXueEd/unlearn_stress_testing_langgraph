@@ -1,3 +1,5 @@
+# Core LangGraph and LangChain dependencies
+torch
 langgraph>=0.2.6
 langchain>=0.3.19
 langchain-openai
@@ -7,16 +9,38 @@ python-dotenv>=1.0.1
 langgraph-sdk>=0.1.57
 langgraph-cli
 langgraph-api
+
+# Web framework dependencies
 fastapi
+uvicorn[standard]
+
+# Database and vector store dependencies
 chromadb>=0.4.22
 langchain-chroma
+
+# Document processing dependencies
 pypdf>=4.0.0
 langchain-community
+pymupdf
+
+# LLM and model dependencies
 langchain-huggingface
-ipykernel
-jupyterlab
 transformers
 langchain-ollama
-langchain-chroma
-chromadb
-pymupdf
+
+# Image generation dependencies
+diffusers
+accelerate
+safetensors
+Pillow>=10.0.0
+torchvision
+torchaudio
+
+# Development and notebook dependencies
+ipykernel
+jupyterlab
+
+# Additional utilities
+requests
+numpy
+typing-extensions

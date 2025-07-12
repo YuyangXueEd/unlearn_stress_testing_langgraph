@@ -1,6 +1,6 @@
-# Simple Chatbot Demo
+# Simple Chatbot Demo with Image Generation
 
-A minimal demonstration of a conversational AI assistant using LangGraph and Ollama. This demo showcases the basic structure and patterns used in the main agent, but in a simplified form for easy understanding and customization.
+A minimal demonstration of a conversational AI assistant using LangGraph and Ollama, now with **Stable Diffusion image generation capabilities**! This demo showcases the basic structure and patterns used in the main agent, but in a simplified form for easy understanding and customization.
 
 ## 🤖 What is this?
 
@@ -9,6 +9,8 @@ A minimal, general-purpose chatbot demo that showcases:
 - **LangGraph Integration**: Simple graph-based conversation flow
 - **Conversation Memory**: Maintains context across multiple exchanges
 - **Ollama Support**: Local LLM integration for privacy and control
+- **🎨 Image Generation**: Stable Diffusion v1.4 integration for creating images from text prompts
+- **Tool Integration**: Extensible tool framework for adding new capabilities
 - **Clean Architecture**: Organized code structure following best practices
 - **Web Interface**: Simple, responsive web UI with conversation history
 - **Easy Setup**: Minimal dependencies and configuration
@@ -17,15 +19,17 @@ A minimal, general-purpose chatbot demo that showcases:
 
 ### Core Files
 - `app.py` - Main FastAPI application
-- `graph.py` - LangGraph definition with single chat node
-- `state.py` - Simple state management
+- `graph.py` - LangGraph definition with enhanced chat node
+- `state.py` - Enhanced state management with tool support
 - `configuration.py` - Basic configuration
 - `manager.py` - Conversation management
-- `interface.py` - Web UI components
+- `interface.py` - Web UI components with image generation examples
 - `prompts.py` - Prompt templates
+- `tools.py` - **NEW**: Tool definitions including Stable Diffusion
 
 ### Utility Files
 - `run.py` - Simple demo runner
+- `setup_sd.sh` - **NEW**: Setup script for Stable Diffusion dependencies
 - `__init__.py` - Package initialization
 
 ## 🚀 Quick Start
@@ -46,6 +50,19 @@ A minimal, general-purpose chatbot demo that showcases:
    pip install fastapi uvicorn langchain-ollama langgraph
    ```
 
+3. **🎨 For Image Generation (Optional)**:
+   ```bash
+   # Run the setup script
+   chmod +x setup_sd.sh
+   ./setup_sd.sh
+   
+   # Or manually install dependencies:
+   pip install torch torchvision torchaudio diffusers transformers accelerate safetensors pillow
+   
+   # Download Stable Diffusion v1.4 model
+   git clone https://huggingface.co/CompVis/stable-diffusion-v1-4 demo/models/CompVis/stable-diffusion-v1-4
+   ```
+
 ### Running the Demo
 
 ```bash
@@ -54,6 +71,8 @@ python run.py
 # Or directly: python app.py
 # Then open: http://localhost:8000
 ```
+
+**Note**: Image generation requires the Stable Diffusion model to be downloaded. Without it, the chatbot will still work for conversations, but image generation requests will return an error message.
 
 ## 💡 Example Conversations
 
@@ -69,21 +88,36 @@ python run.py
 - "Explain blockchain technology"
 - "What is cloud computing?"
 
+### 🎨 Image Generation Examples
+- "Generate an image of a sunset over mountains"
+- "Create a picture of a cute cat in a garden"
+- "Draw a futuristic city skyline"
+- "Make an image of a peaceful forest scene"
+- "Visualize a steampunk robot"
+
 ### Multi-Round Conversations
 - "Hi, my name is Alice"
 - "What's my name?" (tests memory)
 - "Tell me about Python programming"
 - "Can you give me an example of what we just discussed?" (tests context)
+- "Generate an image of what we just discussed" (combines conversation memory with image generation)
 
 ## 🔧 How It Works
 
 ### Architecture Overview
 
 ```
-User Input → Simple Graph → Chat Node → LLM Response → User
+User Input → Enhanced Graph → Chat Node → Tool Detection → LLM/Tool Response → User
+                                  ↓
+                            Tool Execution (if needed)
+                                  ↓
+                         Stable Diffusion Pipeline
 ```
 
 1. **Input Processing**: User message is received via web or CLI
+2. **Tool Detection**: System checks if the request requires tool usage (e.g., image generation)
+3. **Tool Execution**: If needed, appropriate tools are called (Stable Diffusion for images)
+4. **Response Generation**: Either tool results or conversational LLM responses are returned
 2. **Graph Execution**: Simple LangGraph processes the message
 3. **LLM Generation**: Ollama model generates response
 4. **Output Formatting**: Response is formatted and returned
@@ -156,7 +190,7 @@ Run with detailed logging:
 PYTHONPATH=.. python -c "
 import logging
 logging.basicConfig(level=logging.DEBUG)
-from demo.cli import main
+from cli import main
 import asyncio
 asyncio.run(main())
 "

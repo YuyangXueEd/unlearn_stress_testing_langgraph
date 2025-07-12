@@ -9,8 +9,17 @@ from typing import Dict, Any
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage
-from demo.graph import demo_graph
-from demo.configuration import DemoConfiguration
+
+try:
+    from graph import demo_graph
+    from configuration import DemoConfiguration
+except ImportError:
+    try:
+        from srcs.graph import demo_graph
+        from srcs.configuration import DemoConfiguration
+    except ImportError:
+        from .graph import demo_graph
+        from .configuration import DemoConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +84,17 @@ class ChatbotManager:
                 # Use the AI message from the result
                 self.conversation_messages.extend(result["messages"])
             
-            return {
+            # Prepare response
+            response_data = {
                 "response": response_text,
                 "timestamp": datetime.now().isoformat()
             }
+            
+            # Include tool result if available (for image generation)
+            if "tool_result" in result:
+                response_data["tool_result"] = result["tool_result"]
+            
+            return response_data
             
         except Exception as e:
             logger.error(f"Error processing message: {e}")

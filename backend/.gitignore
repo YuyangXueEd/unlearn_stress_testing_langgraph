@@ -168,3 +168,5 @@ examples/chroma_db/
 chroma_db/
 paper/
 code/
+demo/models
+demo/tmps

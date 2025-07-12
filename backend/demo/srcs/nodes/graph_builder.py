@@ -6,20 +6,25 @@ Functions for constructing and configuring the LangGraph.
 
 from langgraph.graph import StateGraph
 
-from demo.state import ChatState
-from demo.nodes.chat_nodes import chat_node
-from demo.nodes.edges import setup_basic_edges
+from state import ChatState
+from nodes.chat_nodes import chat_node
+from nodes.image_nodes import image_generation_node
+from nodes.routing_nodes import router_node
+from nodes.edges import setup_conditional_edges
 
 
 def create_demo_graph():
     """
-    Create and configure the demo graph.
+    Create and configure the demo graph with conditional routing.
     
     This function:
     1. Creates a StateGraph with ChatState
-    2. Adds all necessary nodes
-    3. Sets up edges and routing
+    2. Adds router, conversation, and image generation nodes
+    3. Sets up conditional edges for routing
     4. Compiles and returns the graph
+    
+    Architecture:
+    START -> router -> (conversation OR image_generation) -> END
     
     Returns:
         Compiled LangGraph ready for execution
@@ -30,7 +35,7 @@ def create_demo_graph():
     # Add nodes
     _add_nodes(builder)
     
-    # Set up edges
+    # Set up conditional edges
     _setup_edges(builder)
     
     # Compile and return the graph
@@ -44,8 +49,14 @@ def _add_nodes(builder):
     Args:
         builder: StateGraph builder instance
     """
-    # Add chat processing node
-    builder.add_node("chat", chat_node)
+    # Add routing node to determine task type
+    builder.add_node("router", router_node)
+    
+    # Add conversation processing node
+    builder.add_node("conversation", chat_node)
+    
+    # Add image generation node
+    builder.add_node("image_generation", image_generation_node)
     
     # Future nodes can be added here:
     # builder.add_node("preprocessor", preprocess_node)
@@ -55,13 +66,10 @@ def _add_nodes(builder):
 
 def _setup_edges(builder):
     """
-    Set up all edges for the graph.
+    Set up all edges for the graph with conditional routing.
     
     Args:
         builder: StateGraph builder instance
     """
-    # Set up basic linear flow
-    setup_basic_edges(builder)
-    
-    # Future: Add conditional routing
-    # setup_conditional_edges(builder)
+    # Set up conditional routing flow
+    setup_conditional_edges(builder)

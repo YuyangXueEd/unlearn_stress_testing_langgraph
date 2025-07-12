@@ -202,6 +202,32 @@ def get_chat_html() -> str:
                 background: #e9ecef;
             }
             
+            .generated-image {
+                max-width: 100%;
+                max-height: 400px;
+                border-radius: 8px;
+                margin: 10px 0;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                cursor: pointer;
+                transition: transform 0.2s;
+            }
+            
+            .generated-image:hover {
+                transform: scale(1.02);
+            }
+            
+            .image-container {
+                text-align: center;
+                margin: 10px 0;
+            }
+            
+            .image-caption {
+                font-size: 0.9rem;
+                color: #666;
+                margin-top: 5px;
+                font-style: italic;
+            }
+            
             @media (max-width: 768px) {
                 .chat-container {
                     padding: 0.5rem;
@@ -230,14 +256,17 @@ def get_chat_html() -> str:
                     <li onclick="askExample(this)">What is machine learning?</li>
                     <li onclick="askExample(this)">My name is John, nice to meet you!</li>
                     <li onclick="askExample(this)">Tell me a short story about a robot</li>
+                    <li onclick="askExample(this)">Generate an image of a sunset over mountains</li>
+                    <li onclick="askExample(this)">Create a picture of a cute cat in a garden</li>
                     <li onclick="askExample(this)">What did we just talk about?</li>
                 </ul>
             </div>
             
-            <div class="chat-messages" id="chatMessages">
-                <div class="welcome-message">
-                    👋 Hello! I'm a simple AI assistant with conversation memory. I can remember our chat history and refer back to previous messages!
-                </div>
+            <div class="chat-messages" id="chatMessages">            <div class="welcome-message">
+                👋 Hello! I'm a simple AI assistant with conversation memory and image generation capabilities. 
+                <br>I can remember our chat history and create images based on your descriptions!
+                <br><br>🎨 Try asking me to "generate an image of..." anything you'd like to see!
+            </div>
             </div>
             
             <div class="loading" id="loading">
@@ -262,6 +291,10 @@ def get_chat_html() -> str:
             function askExample(element) {
                 document.getElementById('messageInput').value = element.textContent;
                 sendMessage();
+            }
+            
+            function openImageInNewTab(imageUrl) {
+                window.open(imageUrl, '_blank');
             }
             
             function handleKeyPress(event) {
@@ -329,7 +362,20 @@ def get_chat_html() -> str:
                     // Add bot response
                     const botMessage = document.createElement('div');
                     botMessage.className = 'message bot-message';
-                    botMessage.innerHTML = `<div class="message-content">${data.response}</div>`;
+                    
+                    let messageContent = `<div class="message-content">${data.response}</div>`;
+                    
+                    // Check if an image was generated
+                    if (data.image_url && data.image_filename) {
+                        messageContent += `
+                            <div class="image-container">
+                                <img src="${data.image_url}" alt="Generated Image" class="generated-image" onclick="openImageInNewTab('${data.image_url}')">
+                                <div class="image-caption">🎨 Generated Image: ${data.image_filename}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    botMessage.innerHTML = messageContent;
                     messagesContainer.appendChild(botMessage);
                     
                 } catch (error) {

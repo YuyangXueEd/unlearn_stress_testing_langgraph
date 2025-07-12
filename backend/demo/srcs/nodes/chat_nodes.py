@@ -8,20 +8,20 @@ import logging
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_ollama import ChatOllama
 
-from demo.state import ChatState
-from demo.prompts import get_chat_prompt, get_error_prompt, get_fallback_prompt
+from state import ChatState
+from prompts import get_chat_prompt, get_error_prompt, get_fallback_prompt
 
 logger = logging.getLogger(__name__)
 
 
 def chat_node(state: ChatState) -> ChatState:
     """
-    Simple chat node that responds to user messages with conversation memory.
+    Simplified chat node that handles only conversational responses.
     
     This node:
     1. Extracts the user message from state
     2. Builds conversation context from message history
-    3. Generates a response using the configured LLM
+    3. Generates a conversational response using the configured LLM
     4. Returns the response with updated state
     
     Args:
@@ -65,7 +65,7 @@ def chat_node(state: ChatState) -> ChatState:
         if len(response_text) > max_length:
             response_text = response_text[:max_length-3] + "..."
         
-        logger.info(f"Generated response for: {user_message[:50]}...")
+        logger.info(f"Generated conversation response for: {user_message[:50]}...")
         
         return {
             "response": response_text,

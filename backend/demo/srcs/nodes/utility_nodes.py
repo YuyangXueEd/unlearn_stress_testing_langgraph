@@ -5,7 +5,7 @@ Nodes for utility functions like preprocessing, postprocessing, and validation.
 """
 
 import logging
-from demo.state import ChatState
+from state import ChatState
 
 logger = logging.getLogger(__name__)
 

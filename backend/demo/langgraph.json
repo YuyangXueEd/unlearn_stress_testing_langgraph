@@ -1,0 +1,10 @@
+{
+  "dependencies": [".", "../"],
+  "graphs": {
+    "demo": "./srcs/graph.py:demo_graph"
+  },
+  "http": {
+    "app": "./srcs/app.py:app"
+  },
+  "env": ".env"
+}
