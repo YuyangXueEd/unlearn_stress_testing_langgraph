@@ -7,7 +7,7 @@ Functions for constructing and configuring the LangGraph.
 from langgraph.graph import StateGraph
 
 from state import ChatState
-from nodes.chat_nodes import chat_node
+from nodes.chat_nodes import chat_node, finalise_answer
 from nodes.image_nodes import image_generation_node
 from nodes.code_nodes import code_generation_node, generate, execute_and_check_code, decide_to_finish
 from nodes.database_nodes import database_search_node, reflection_node, final_answer_node
@@ -56,6 +56,9 @@ def _add_nodes(builder):
     
     # Add conversation processing node
     builder.add_node("conversation", chat_node)
+    
+    # Add finalise answer node for summary and concise responses
+    builder.add_node("finalise_answer", finalise_answer)
     
     # Add image generation node
     builder.add_node("image_generation", image_generation_node)

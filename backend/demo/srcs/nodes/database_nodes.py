@@ -20,6 +20,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from state import ChatState
 from prompts import REFLECTION_PROMPT, FINAL_ANSWER_PROMPT, get_current_date
+from configuration import DemoConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +518,10 @@ def reflection_node(state: ChatState) -> ChatState:
         Updated state with reflection analysis
     """
     try:
+        # Get configuration
+        config = DemoConfiguration()
+        max_iterations = config.max_database_search_iterations
+        
         # Get current state information
         search_results = state.get("search_results", {})
         search_iteration = state.get("search_iteration", 1)
@@ -543,7 +548,7 @@ def reflection_node(state: ChatState) -> ChatState:
             search_results=results_text
         )
         
-        logger.info(f"Performing reflection analysis (iteration {search_iteration}/3)")
+        logger.info(f"Performing reflection analysis (iteration {search_iteration}/{max_iterations})")
         
         # Call Ollama for reflection analysis
         reflection_response = _call_ollama_llm(reflection_prompt)
@@ -560,14 +565,14 @@ def reflection_node(state: ChatState) -> ChatState:
             else:
                 # Fallback if JSON parsing fails
                 reflection_result = {
-                    "is_sufficient": search_iteration >= 3,  # Force sufficient if max iterations reached
+                    "is_sufficient": search_iteration >= max_iterations,  # Force sufficient if max iterations reached
                     "knowledge_gap": "Unable to parse reflection analysis",
                     "follow_up_query": ""
                 }
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse reflection JSON: {e}")
             reflection_result = {
-                "is_sufficient": search_iteration >= 3,  # Force sufficient if max iterations reached
+                "is_sufficient": search_iteration >= max_iterations,  # Force sufficient if max iterations reached
                 "knowledge_gap": "Unable to parse reflection analysis",
                 "follow_up_query": ""
             }
@@ -576,7 +581,7 @@ def reflection_node(state: ChatState) -> ChatState:
         is_sufficient = reflection_result.get("is_sufficient", False)
         
         # Force sufficient if we've reached max iterations
-        if search_iteration >= 3:
+        if search_iteration >= max_iterations:
             is_sufficient = True
             reflection_result["is_sufficient"] = True
         
@@ -592,7 +597,7 @@ def reflection_node(state: ChatState) -> ChatState:
                 # Add to previous queries
                 previous_queries.append(new_query)
         
-        response_text = f"🔍 **Reflection Analysis (Iteration {search_iteration}/3)**\n\n"
+        response_text = f"🔍 **Reflection Analysis (Iteration {search_iteration}/{max_iterations})**\n\n"
         
         if is_sufficient:
             response_text += "✅ **Analysis Complete**: The search results provide sufficient information to answer your question.\n"

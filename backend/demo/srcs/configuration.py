@@ -21,3 +21,9 @@ class DemoConfiguration(BaseModel):
         default=2000,
         description="Maximum length of responses"
     )
+    
+    # Database search settings
+    max_database_search_iterations: int = Field(
+        default=3,
+        description="Maximum number of database search iterations before finalizing answer"
+    )

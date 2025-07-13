@@ -27,6 +27,7 @@ pymupdf
 langchain-huggingface
 transformers
 langchain-ollama
+langchain-experimental
 
 # Image generation dependencies
 diffusers

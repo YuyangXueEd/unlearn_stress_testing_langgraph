@@ -82,8 +82,9 @@ def setup_conditional_edges(builder):
         }
     )
     
-    # End nodes
-    builder.add_edge("conversation", END)
+    # End nodes - conversation goes to finalise_answer for summary
+    builder.add_edge("conversation", "finalise_answer")
+    builder.add_edge("finalise_answer", END)
     builder.add_edge("image_generation", END)
     builder.add_edge("final_answer", END)
 
