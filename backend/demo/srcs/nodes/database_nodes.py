@@ -466,13 +466,13 @@ def get_database_status() -> Dict[str, Any]:
     return status
 
 
-def _call_ollama_llm(prompt: str, model_name: str = "qwen3") -> str:
+def _call_ollama_llm(prompt: str, model_name: str = "gemma3") -> str:
     """
     Call Ollama LLM API for text generation.
     
     Args:
         prompt: The input prompt for the LLM
-        model_name: The Ollama model to use (default: qwen3)
+        model_name: The Ollama model to use (default: gemma3)
         
     Returns:
         Generated text response

@@ -9,12 +9,12 @@ import re
 from langchain_core.messages import AIMessage
 
 from state import ChatState
-from tools import execute_tool
+from tools import execute_tool_async
 
 logger = logging.getLogger(__name__)
 
 
-def image_generation_node(state: ChatState) -> ChatState:
+async def image_generation_node(state: ChatState) -> ChatState:
     """
     Dedicated node for handling image generation requests.
     
@@ -43,7 +43,7 @@ def image_generation_node(state: ChatState) -> ChatState:
         logger.info(f"Processing image generation request: {image_prompt}")
         
         # Call the image generation tool
-        result = execute_tool("generate_image", prompt=image_prompt)
+        result = await execute_tool_async("generate_image", {"prompt": image_prompt})
         
         if result.get("success"):
             response_text = (

@@ -20,12 +20,12 @@ from langchain_experimental.tools import PythonREPLTool
 from langchain_ollama import ChatOllama
 from langchain_core.messages import AIMessage
 from state import ChatState
+from tools import execute_tool_async
 import aiofiles  # For async file operations
 
 logger = logging.getLogger(__name__)
 
-# Initialize PythonREPL tool
-python_repl = PythonREPLTool()
+# Remove the local PythonREPL tool since we'll use the one from tools.py
 
 
 # ============================================================================
@@ -98,7 +98,7 @@ async def generate(state: ChatState, config=None) -> ChatState:
         logger.info(f"Generated prompt: {prompt[:200]}...")
         
         # Generate code using LLM
-        model_name = state.get("model_name", "qwen3")
+        model_name = state.get("model_name", "gemma3")
         llm = ChatOllama(
             model=model_name,
             temperature=0.1,
@@ -425,40 +425,15 @@ def _parse_code_response(response_text: str) -> Dict[str, Any]:
 async def _execute_code_safely(code: str) -> Dict[str, Any]:
     """Execute Python code safely using PythonREPLTool in a separate thread."""
     try:
-        # Run the blocking PythonREPL operation in a separate thread
-        result = await asyncio.to_thread(python_repl.run, code)
+        # Execute code using the centralized tool
+        result = await execute_tool_async("execute_python_code", {"code": code})
         
-        # Parse the result and check for errors
-        if isinstance(result, str):
-            output = result.strip()
-        else:
-            output = str(result).strip()
-        
-        # Check if the output contains error indicators
-        error_indicators = [
-            'Traceback (most recent call last):',
-            'Error:', 'Exception:', 'ValueError:', 'TypeError:', 'NameError:',
-            'SyntaxError:', 'AttributeError:', 'KeyError:', 'IndexError:',
-            'ZeroDivisionError:', 'ImportError:', 'ModuleNotFoundError:'
-        ]
-        
-        has_error = any(indicator in output for indicator in error_indicators)
-        
-        logger.info(f"Code execution output: {output[:200]}...")
-        logger.info(f"Error detected: {has_error}")
-        
-        if has_error:
-            status = 'error'
-            error = output  # The entire output is the error message
-        else:
-            status = 'success'
-            error = None
-            
+        # The tool returns a structured response
         return {
-            'status': status,
-            'output': output,
-            'error': error,
-            'traceback': output if has_error else None
+            'status': result.get('status', 'success'),
+            'output': result.get('output', ''),
+            'error': result.get('error'),
+            'execution_time': result.get('execution_time', 0)
         }
         
     except Exception as e:
@@ -466,7 +441,7 @@ async def _execute_code_safely(code: str) -> Dict[str, Any]:
             'status': 'error',
             'output': '',
             'error': str(e),
-            'traceback': traceback.format_exc()
+            'execution_time': 0
         }
 
 
@@ -527,7 +502,7 @@ async def _save_code_to_file(code: str, requirements: str, validation_result: Di
         # Get tmps directory - same pattern as image generation
         # Current file is at: backend/demo/srcs/nodes/code_nodes.py
         # Target is: backend/demo/tmps
-        tmps_dir = Path(__file__).parent.parent.parent / "tmps"
+        tmps_dir = Path(__file__).parent.parent / "tmps"
         tmps_dir.mkdir(exist_ok=True)
         
         logger.info(f"Saving code to tmps directory: {tmps_dir}")

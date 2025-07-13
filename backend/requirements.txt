@@ -44,3 +44,4 @@ jupyterlab
 requests
 numpy
 typing-extensions
+aiofiles  # For async file operations

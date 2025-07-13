@@ -44,7 +44,7 @@ A minimal, general-purpose chatbot demo that showcases:
    ollama serve
    
    # Pull a recommended model (or any chat model you prefer)
-   ollama pull qwen3
+   ollama pull gemma3
    ```
 
 2. **Python dependencies**:
@@ -170,7 +170,7 @@ Question: {user_message}"""
 **"Failed to initialize chatbot"**
 - Check that Ollama is running: `curl http://localhost:11434`
 - Verify a model is available: `ollama list`
-- Try pulling a model: `ollama pull qwen3`
+- Try pulling a model: `ollama pull gemma3`
 
 **"Model not found" or connection errors**
 - Ensure Ollama server is accessible at `localhost:11434`

@@ -7,6 +7,8 @@ Tools that the agent can use for various tasks.
 import os
 import logging
 import base64
+import asyncio
+import traceback
 from typing import Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +16,7 @@ from pathlib import Path
 import torch
 from diffusers import StableDiffusionPipeline
 from PIL import Image
+from langchain_experimental.tools import PythonREPLTool
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +161,74 @@ def generate_image_with_stable_diffusion(
         }
 
 
+# Initialize PythonREPL tool
+_python_repl = PythonREPLTool()
+
+
+@register_tool("execute_python")
+async def execute_python_code(code: str) -> Dict[str, Any]:
+    """
+    Execute Python code safely using PythonREPLTool in a separate thread.
+    
+    Args:
+        code: Python code to execute
+        
+    Returns:
+        Dictionary containing execution results, output, and error information
+    """
+    try:
+        logger.info(f"Executing Python code: {code[:100]}...")
+        
+        # Run the blocking PythonREPL operation in a separate thread
+        result = await asyncio.to_thread(_python_repl.run, code)
+        
+        # Parse the result and check for errors
+        if isinstance(result, str):
+            output = result.strip()
+        else:
+            output = str(result).strip()
+        
+        # Check if the output contains error indicators
+        error_indicators = [
+            'Traceback (most recent call last):',
+            'Error:', 'Exception:', 'ValueError:', 'TypeError:', 'NameError:',
+            'SyntaxError:', 'AttributeError:', 'KeyError:', 'IndexError:',
+            'ZeroDivisionError:', 'ImportError:', 'ModuleNotFoundError:'
+        ]
+        
+        has_error = any(indicator in output for indicator in error_indicators)
+        
+        logger.info(f"Code execution output: {output[:200]}...")
+        logger.info(f"Error detected: {has_error}")
+        
+        if has_error:
+            status = 'error'
+            error = output  # The entire output is the error message
+        else:
+            status = 'success'
+            error = None
+            
+        return {
+            'success': status == 'success',
+            'status': status,
+            'output': output,
+            'error': error,
+            'traceback': output if has_error else None,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error executing Python code: {e}")
+        return {
+            'success': False,
+            'status': 'error',
+            'output': '',
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+            'timestamp': datetime.now().isoformat()
+        }
+
+
 def get_available_tools() -> Dict[str, Any]:
     """Get list of available tools with their descriptions."""
     return {
@@ -174,6 +245,14 @@ def get_available_tools() -> Dict[str, Any]:
                 "seed": "(Optional) Random seed for reproducible results"
             },
             "example": "generate_image('a beautiful sunset over mountains')"
+        },
+        "execute_python": {
+            "name": "execute_python",
+            "description": "Execute Python code safely and return results",
+            "parameters": {
+                "code": "Python code to execute"
+            },
+            "example": "execute_python('print(5 + 7)')"
         }
     }
 
@@ -197,6 +276,36 @@ def execute_tool(tool_name: str, **kwargs) -> Dict[str, Any]:
     
     try:
         return AVAILABLE_TOOLS[tool_name](**kwargs)
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Error executing tool '{tool_name}': {str(e)}"
+        }
+
+
+async def execute_tool_async(tool_name: str, **kwargs) -> Dict[str, Any]:
+    """
+    Execute an async tool by name with given parameters.
+    
+    Args:
+        tool_name: Name of the tool to execute
+        **kwargs: Tool parameters
+        
+    Returns:
+        Tool execution result
+    """
+    if tool_name not in AVAILABLE_TOOLS:
+        return {
+            "success": False,
+            "error": f"Tool '{tool_name}' not found. Available tools: {list(AVAILABLE_TOOLS.keys())}"
+        }
+    
+    try:
+        tool_func = AVAILABLE_TOOLS[tool_name]
+        if asyncio.iscoroutinefunction(tool_func):
+            return await tool_func(**kwargs)
+        else:
+            return tool_func(**kwargs)
     except Exception as e:
         return {
             "success": False,
