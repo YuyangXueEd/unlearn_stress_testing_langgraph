@@ -59,7 +59,7 @@ def router_node(state: ChatState) -> ChatState:
         
         # Add stress testing context if it's a stress testing task
         if task_type == "stress_testing":
-            state_update["stress_testing"] = stress_context
+            state_update["stress_testing_context"] = stress_context
         
         return state_update
         
