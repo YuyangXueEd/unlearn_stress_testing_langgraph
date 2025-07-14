@@ -35,3 +35,28 @@ class ChatState(TypedDict):
                                              # - validation_result: code validation results
                                              # - error: any error messages
                                              # - error_context: context for iteration feedback
+    
+    # Stress testing state
+    stress_testing: Optional[Dict[str, Any]]  # Store stress testing workflow state including:
+                                            # - status: current workflow status
+                                            # - concept: concept to be tested (XXX)
+                                            # - method: erasure method (YYY, optional)
+                                            # - model: target model name (ZZZ)
+                                            # - iteration: current iteration number
+                                            # - max_iterations: maximum iterations allowed
+                                            # - plan: generated stress testing plan
+                                            # - rag_results: results from RAG search
+                                            # - test_code: generated testing code
+                                            # - execution_results: test execution results
+                                            # - evaluation_results: concept detection results
+                                            # - concept_resurgence_rate: percentage of concept presence
+                                            # - report_content: final report content
+                                            # - generated_images: list of generated test images
+                                            # - refined_queries: refined search queries for RAG
+                                                    # - refined_queries: RAG query results
+                                                    # - rag_results: database search results
+                                                    # - plan: generated testing plan
+                                                    # - generated_code: stress testing code
+                                                    # - execution_results: test execution results
+                                                    # - evaluation_results: concept detection results
+                                                    # - iteration: current iteration number

@@ -45,13 +45,14 @@ def setup_conditional_edges(builder):
         {
             "conversation": "conversation",
             "image_generation": "image_generation", 
-            "code_generation": "code_generation",
-            "database_search": "database_search"
+            "code_generation": "code_gen",
+            "database_search": "database_search",
+            "stress_testing": "rag_query"
         }
     )
     
     # Code generation workflow (3-node pattern from PDF)
-    builder.add_edge("code_generation", "generate")  # Entry -> Generate
+    builder.add_edge("code_gen", "generate")  # Entry -> Generate
     builder.add_edge("generate", "execute_and_check_code")  # Generate -> Execute
     builder.add_conditional_edges(
         "execute_and_check_code",
@@ -87,22 +88,44 @@ def setup_conditional_edges(builder):
     builder.add_edge("finalise_answer", END)
     builder.add_edge("image_generation", END)
     builder.add_edge("final_answer", END)
+    
+    # Stress testing workflow edges
+    builder.add_edge("rag_query", "rag_search")
+    builder.add_edge("rag_search", "hypothesize")
+    builder.add_edge("hypothesize", "stress_code_gen")
+    builder.add_edge("stress_code_gen", "stress_execute")
+    builder.add_conditional_edges(
+        "stress_execute",
+        determine_stress_execute_route,
+        {
+            "evaluator": "stress_evaluator"
+        }
+    )
+    builder.add_conditional_edges(
+        "stress_evaluator",
+        determine_evaluator_route,
+        {
+            "hypothesize": "hypothesize",
+            "report_generation": "stress_report_gen"
+        }
+    )
+    builder.add_edge("stress_report_gen", END)
 
 
 def determine_task_route(state):
     """
-    Determine whether to route to conversation, image generation, code generation, or database search based on task type.
+    Determine whether to route to conversation, image generation, code generation, database search, or stress testing based on task type.
     
     Args:
         state: Current chat state containing task_type
         
     Returns:
-        String indicating the next node to visit: 'conversation', 'image_generation', 'code_generation', or 'database_search'
+        String indicating the next node to visit: 'conversation', 'image_generation', 'code_generation', 'database_search', or 'stress_testing'
     """
     task_type = state.get("task_type", "conversation")
     
     # Default to conversation if task_type is not set or unknown
-    if task_type not in ["conversation", "image_generation", "code_generation", "database_search"]:
+    if task_type not in ["conversation", "image_generation", "code_generation", "database_search", "stress_testing"]:
         return "conversation"
     
     return task_type
@@ -173,3 +196,40 @@ def determine_code_workflow_next(state):
     
     # Otherwise, we're done
     return "end"
+
+
+def determine_stress_execute_route(state):
+    """
+    Determine next step after stress testing code execution - always go to evaluator.
+    
+    Args:
+        state: Current chat state
+        
+    Returns:
+        String indicating next node: 'evaluator'
+    """
+    return "evaluator"
+
+
+def determine_evaluator_route(state):
+    """
+    Determine whether to go back to hypothesize or proceed to report generation
+    based on concept resurgence rate.
+    
+    Args:
+        state: Current chat state containing stress testing results
+        
+    Returns:
+        String indicating next node: 'hypothesize' or 'report_generation'
+    """
+    stress_testing = state.get("stress_testing", {})
+    resurgence_rate = stress_testing.get("concept_resurgence_rate", 0)
+    iteration = stress_testing.get("iteration", 1)
+    max_iterations = stress_testing.get("max_iterations", 3)
+    
+    # If resurgence rate > 10% or max iterations reached, generate report
+    if resurgence_rate > 0.1 or iteration >= max_iterations:
+        return "report_generation"
+    
+    # Otherwise, go back to hypothesize for a new plan
+    return "hypothesize"

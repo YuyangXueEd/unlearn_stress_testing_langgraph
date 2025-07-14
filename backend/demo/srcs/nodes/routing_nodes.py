@@ -5,6 +5,7 @@ Nodes responsible for determining the flow and routing messages to appropriate h
 """
 
 import logging
+from typing import Dict
 from state import ChatState
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,11 @@ def router_node(state: ChatState) -> ChatState:
                 user_message = last_message.content
         
         # Determine task type based on message content
-        if _is_image_generation_request(user_message):
+        if _is_stress_testing_request(user_message):
+            task_type = "stress_testing"
+            # Extract stress testing context
+            stress_context = _extract_stress_testing_components(user_message)
+        elif _is_image_generation_request(user_message):
             task_type = "image_generation"
         elif _is_code_generation_request(user_message):
             task_type = "code_generation"
@@ -45,13 +50,18 @@ def router_node(state: ChatState) -> ChatState:
             task_type = "conversation"
         
         logger.info(f"Router decision: {task_type} for message: {user_message[:50]}...")
-        logger.info(f"Code generation check result: {_is_code_generation_request(user_message)}")
         
-        # Add routing decision to state
-        return {
+        # Prepare state update
+        state_update = {
             "task_type": task_type,
             "user_message": user_message  # Ensure user_message is in state
         }
+        
+        # Add stress testing context if it's a stress testing task
+        if task_type == "stress_testing":
+            state_update["stress_testing"] = stress_context
+        
+        return state_update
         
     except Exception as e:
         logger.error(f"Error in router node: {e}")
@@ -271,3 +281,153 @@ def _is_code_generation_request(message: str) -> bool:
             return True
     
     return False
+
+
+def _is_stress_testing_request(message: str) -> bool:
+    """
+    Check if the user message is requesting stress testing.
+    
+    Args:
+        message: User message to analyze
+        
+    Returns:
+        True if this appears to be a stress testing request
+    """
+    stress_keywords = [
+        # Direct stress testing keywords
+        "stress test", "stress-test", "stress testing", "stress-testing",
+        "run a stress test", "perform stress test", "execute stress test",
+        "conduct stress test", "do stress test",
+        
+        # Verification and testing keywords
+        "verify erasure", "test erasure", "validate erasure", "check erasure",
+        "test unlearning", "verify unlearning", "validate unlearning",
+        "check unlearning", "evaluate erasure", "evaluate unlearning",
+        
+        # Model testing patterns
+        "test the", "verify the", "check the", "evaluate the",
+        "stress test the", "stress-test the",
+        
+        # Concept erasure specific
+        "concept erasure", "concept removal", "concept unlearning",
+        "erasure of", "removal of", "unlearning of"
+    ]
+    
+    message_lower = message.lower()
+    
+    # First check for exact keyword matches
+    if any(keyword in message_lower for keyword in stress_keywords):
+        return True
+    
+    # Check for specific patterns like "stress-test the XXX erasure of YYY on ZZZ model"
+    import re
+    
+    stress_patterns = [
+        r'\b(stress.?test|verify|test|check|evaluate)\s+.*(erasure|removal|unlearning)\s+of\s+["\']?(\w+)["\']?\s+(on|from|in)\s+["\']?(\w+)["\']?\s+model',
+        r'\brun\s+a\s+stress\s+test\s+to\s+(verify|test|check|evaluate)',
+        r'\bstress.?test\s+the\s+\w+\s+erasure',
+        r'\b(verify|test|check|evaluate)\s+.*concept.*erasure',
+        r'\b(stress.?test|test)\s+.*unlearn',
+    ]
+    
+    for pattern in stress_patterns:
+        if re.search(pattern, message_lower):
+            return True
+    
+    return False
+
+
+def _extract_stress_testing_components(message: str) -> Dict[str, str]:
+    """
+    Extract stress testing components from user message.
+    
+    Patterns:
+    - "Stress-test the YYY erasure of 'XXX' on the 'ZZZ' model"
+    - "Run a stress test to verify the YYY erasure of 'XXX' from 'ZZZ' model"
+    
+    Args:
+        message: User message containing stress testing request
+        
+    Returns:
+        Dictionary with concept, method, and model
+    """
+    import re
+    
+    # Initialize components
+    components = {
+        "concept": "",
+        "method": "",
+        "model": ""
+    }
+    
+    message_lower = message.lower()
+    
+    # Pattern 1: "stress-test the METHOD erasure of 'CONCEPT' on the 'MODEL' model"
+    pattern1 = r'stress.?test\s+the\s+(\w+)\s+erasure\s+of\s+["\']?([^"\']+?)["\']?\s+on\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
+    match1 = re.search(pattern1, message_lower)
+    
+    if match1:
+        components["method"] = match1.group(1).strip()
+        components["concept"] = match1.group(2).strip()
+        components["model"] = match1.group(3).strip()
+        return components
+    
+    # Pattern 1.5: "stress-test the erasure of 'CONCEPT' on the 'MODEL' model" (no method specified)
+    pattern1_5 = r'stress.?test\s+the\s+erasure\s+of\s+["\']([^"\']+)["\']?\s+on\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
+    match1_5 = re.search(pattern1_5, message_lower)
+    
+    if match1_5:
+        components["concept"] = match1_5.group(1).strip()
+        components["model"] = match1_5.group(2).strip()
+        components["method"] = "general"  # Default method when not specified
+        return components
+    
+    # Pattern 2: "verify the METHOD erasure of 'CONCEPT' from 'MODEL' model"
+    pattern2 = r'(verify|test|check|evaluate)\s+the\s+(\w+)\s+erasure\s+of\s+["\']?([^"\']+?)["\']?\s+from\s+["\']?([^"\']+?)["\']?\s+model'
+    match2 = re.search(pattern2, message_lower)
+    
+    if match2:
+        components["method"] = match2.group(2).strip()
+        components["concept"] = match2.group(3).strip()
+        components["model"] = match2.group(4).strip()
+        return components
+    
+    # Pattern 3: "stress test CONCEPT erasure on MODEL" (no quotes)
+    pattern3 = r'stress.?test\s+(?:the\s+)?erasure\s+of\s+([a-zA-Z0-9_\-\s]+?)\s+on\s+([a-zA-Z0-9\-\s\.]+?)(?:\s*$|\s+model|\s*\.)'
+    match3 = re.search(pattern3, message_lower)
+    
+    if match3:
+        components["concept"] = match3.group(1).strip()
+        components["model"] = match3.group(2).strip()
+        return components
+    
+    # Pattern 4: "test the unlearning of CONCEPT concept on MODEL"
+    pattern4 = r'(test|verify|check|evaluate)\s+(?:the\s+)?unlearning\s+of\s+([a-zA-Z0-9_\-\s]+?)\s+concept\s+on\s+([a-zA-Z0-9\-\s\.]+?)(?:\s*$|\s+model|\s*\.)'
+    match4 = re.search(pattern4, message_lower)
+    
+    if match4:
+        components["concept"] = match4.group(2).strip()
+        components["model"] = match4.group(3).strip()
+        components["method"] = "general"
+        return components
+    
+    # Pattern 5: General concept and model extraction
+    concept_pattern = r'erasure\s+of\s+["\']?([^"\']+?)["\']?'
+    concept_match = re.search(concept_pattern, message_lower)
+    if concept_match:
+        components["concept"] = concept_match.group(1).strip()
+    
+    model_pattern = r'(?:on|from|in)\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
+    model_match = re.search(model_pattern, message_lower)
+    if model_match:
+        components["model"] = model_match.group(1).strip()
+    
+    # Method extraction (if not found above)
+    if not components["method"]:
+        method_keywords = ["esd", "fmn", "sld", "dare", "tofu", "exact", "gradient", "latent"]
+        for keyword in method_keywords:
+            if keyword in message_lower:
+                components["method"] = keyword
+                break
+    
+    return components

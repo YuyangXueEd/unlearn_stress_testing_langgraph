@@ -12,6 +12,12 @@ from nodes.image_nodes import image_generation_node
 from nodes.code_nodes import code_generation_node, generate, execute_and_check_code, decide_to_finish
 from nodes.database_nodes import database_search_node, reflection_node, final_answer_node
 from nodes.routing_nodes import router_node
+from nodes.stress_testing_nodes import (
+    rag_query_node, rag_search_node, hypothesize_node, 
+    stress_code_generation_node, stress_execute_node, 
+    stress_evaluator_node as evaluator_node, 
+    stress_report_generation_node as report_generation_node
+)
 from nodes.edges import setup_conditional_edges
 
 
@@ -64,7 +70,7 @@ def _add_nodes(builder):
     builder.add_node("image_generation", image_generation_node)
     
     # Add code generation workflow nodes (3-node pattern from PDF)
-    builder.add_node("code_generation", code_generation_node)  # Entry point
+    builder.add_node("code_gen", code_generation_node)  # Entry point (renamed to avoid conflict)
     builder.add_node("generate", generate)                    # Node 1: Generate code
     builder.add_node("execute_and_check_code", execute_and_check_code)  # Node 2: Execute
     builder.add_node("decide_to_finish", decide_to_finish)    # Node 3: Decide
@@ -75,6 +81,15 @@ def _add_nodes(builder):
     # Add reflection and final answer nodes (only for database search flow)
     builder.add_node("reflection", reflection_node)
     builder.add_node("final_answer", final_answer_node)
+    
+    # Add stress testing workflow nodes
+    builder.add_node("rag_query", rag_query_node)
+    builder.add_node("rag_search", rag_search_node)
+    builder.add_node("hypothesize", hypothesize_node)
+    builder.add_node("stress_code_gen", stress_code_generation_node)
+    builder.add_node("stress_execute", stress_execute_node)
+    builder.add_node("stress_evaluator", evaluator_node)
+    builder.add_node("stress_report_gen", report_generation_node)
     
     # Future nodes can be added here:
     # builder.add_node("preprocessor", preprocess_node)
