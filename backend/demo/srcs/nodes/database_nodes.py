@@ -110,15 +110,15 @@ def initialize_database():
             )
         )
         
-        # Initialize Ollama nomic-embed-text embedding function
-        logger.info("Initializing Ollama nomic-embed-text embedding function...")
+        # Initialize Ollama granite-embedding embedding function
+        logger.info("Initializing Ollama granite-embedding embedding function...")
         try:
-            _embedding_function = OllamaEmbeddingFunction(model_name="nomic-embed-text")
+            _embedding_function = OllamaEmbeddingFunction(model_name="granite-embedding")
             
             # Test the embedding function with a simple text
             test_embedding = _embedding_function(["test"])
             if test_embedding and len(test_embedding[0]) > 0:
-                logger.info(f"Successfully connected to Ollama nomic-embed-text (dimension: {len(test_embedding[0])})")
+                logger.info(f"Successfully connected to Ollama granite-embedding (dimension: {len(test_embedding[0])})")
             else:
                 raise Exception("Empty embedding returned from Ollama")
                 

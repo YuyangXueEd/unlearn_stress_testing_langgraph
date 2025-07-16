@@ -426,7 +426,7 @@ async def _execute_code_safely(code: str) -> Dict[str, Any]:
     """Execute Python code safely using PythonREPLTool in a separate thread."""
     try:
         # Execute code using the centralized tool
-        result = await execute_tool_async("execute_python_code", {"code": code})
+        result = await execute_tool_async("execute_python_code", code=code)
         
         # The tool returns a structured response
         return {

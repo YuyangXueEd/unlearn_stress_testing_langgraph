@@ -43,7 +43,7 @@ async def image_generation_node(state: ChatState) -> ChatState:
         logger.info(f"Processing image generation request: {image_prompt}")
         
         # Call the image generation tool
-        result = await execute_tool_async("generate_image", {"prompt": image_prompt})
+        result = await execute_tool_async("generate_image", prompt=image_prompt)
         
         if result.get("success"):
             response_text = (

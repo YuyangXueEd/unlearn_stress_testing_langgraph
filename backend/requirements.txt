@@ -43,6 +43,7 @@ jupyterlab
 
 # Additional utilities
 requests
+aiohttp  # For async HTTP requests
 numpy
 typing-extensions
 aiofiles  # For async file operations

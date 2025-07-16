@@ -574,9 +574,7 @@ async def stress_execute_node(state: ChatState, config=None) -> ChatState:
         # Execute the stress testing code
         logger.info("Executing stress testing code...")
         
-        execution_result = await execute_tool_async("execute_python_code", {
-            "code": test_code
-        })
+        execution_result = await execute_tool_async("execute_python_code", code=test_code)
         
         # Check execution status
         if execution_result.get("status") != "success":
