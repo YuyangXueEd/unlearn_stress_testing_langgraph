@@ -59,7 +59,7 @@ async def rag_query_node(state: ChatState, config=None) -> ChatState:
     
     try:
         # Get stress testing context
-        stress_context = state.get("stress_testing_context", {})
+        stress_context = state.get("stress_testing", {})
         concept = stress_context.get("concept", "")
         method = stress_context.get("method", "general")
         model = stress_context.get("model", "")
@@ -138,7 +138,7 @@ async def rag_query_node(state: ChatState, config=None) -> ChatState:
         return {
             "response": response_text,
             "messages": [AIMessage(content=response_text)],
-            "stress_testing_context": {
+            "stress_testing": {
                 **stress_context,
                 "refined_queries": query_result
             },
@@ -174,7 +174,7 @@ async def rag_search_node(state: ChatState, config=None) -> ChatState:
     
     try:
         # Get stress testing context
-        stress_context = state.get("stress_testing_context", {})
+        stress_context = state.get("stress_testing", {})
         refined_queries = stress_context.get("refined_queries", {})
         
         if not refined_queries:
@@ -273,7 +273,7 @@ async def rag_search_node(state: ChatState, config=None) -> ChatState:
             "response": response_text,
             "messages": [AIMessage(content=response_text)],
             "search_results": formatted_results,
-            "stress_testing_context": {
+            "stress_testing": {
                 **stress_context,
                 "rag_results": unique_results,
                 "search_summary": f"Found {len(unique_results)} relevant documents from {len(search_queries)} queries"
@@ -310,7 +310,7 @@ async def hypothesize_node(state: ChatState, config=None) -> ChatState:
     
     try:
         # Get stress testing context
-        stress_context = state.get("stress_testing_context", {})
+        stress_context = state.get("stress_testing", {})
         concept = stress_context.get("concept", "")
         method = stress_context.get("method", "general")
         model = stress_context.get("model", "")
@@ -371,7 +371,7 @@ async def hypothesize_node(state: ChatState, config=None) -> ChatState:
         return {
             "response": response_text,
             "messages": [AIMessage(content=response_text)],
-            "stress_testing_context": {
+            "stress_testing": {
                 **stress_context,
                 "plan": plan_content,
                 "iteration": iteration,
@@ -409,7 +409,7 @@ async def stress_code_generation_node(state: ChatState, config=None) -> ChatStat
     
     try:
         # Get stress testing context
-        stress_context = state.get("stress_testing_context", {})
+        stress_context = state.get("stress_testing", {})
         plan = stress_context.get("plan", "")
         concept = stress_context.get("concept", "")
         model = stress_context.get("model", "")
@@ -478,7 +478,7 @@ async def stress_code_generation_node(state: ChatState, config=None) -> ChatStat
         return {
             "response": response_text,
             "messages": [AIMessage(content=response_text)],
-            "stress_testing_context": {
+            "stress_testing": {
                 **stress_context,
                 "generated_code": extracted_code,
                 "code_filename": code_filename,

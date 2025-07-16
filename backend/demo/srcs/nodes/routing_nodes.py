@@ -51,25 +51,23 @@ def router_node(state: ChatState) -> ChatState:
         
         logger.info(f"Router decision: {task_type} for message: {user_message[:50]}...")
         
-        # Prepare state update
-        state_update = {
-            "task_type": task_type,
-            "user_message": user_message  # Ensure user_message is in state
-        }
+        # Update the existing state instead of returning a partial dictionary
+        state["task_type"] = task_type
+        state["user_message"] = user_message  # Ensure user_message is in state
         
         # Add stress testing context if it's a stress testing task
         if task_type == "stress_testing":
-            state_update["stress_testing_context"] = stress_context
+            state["stress_testing"] = stress_context
         
-        return state_update
+        return state
         
     except Exception as e:
         logger.error(f"Error in router node: {e}")
-        # Default to conversation on error
-        return {
-            "task_type": "conversation",
-            "user_message": user_message
-        }
+        # Default to conversation on error and preserve existing state
+        state["task_type"] = "conversation"
+        if user_message:
+            state["user_message"] = user_message
+        return state
 
 
 def _is_database_search_request(message: str) -> bool:
@@ -299,11 +297,7 @@ def _is_stress_testing_request(message: str) -> bool:
         "run a stress test", "perform stress test", "execute stress test",
         "conduct stress test", "do stress test",
         
-        # Verification and testing keywords
-        "verify erasure", "test erasure", "validate erasure", "check erasure",
-        "test unlearning", "verify unlearning", "validate unlearning",
-        "check unlearning", "evaluate erasure", "evaluate unlearning",
-        
+       
         # Model testing patterns
         "test the", "verify the", "check the", "evaluate the",
         "stress test the", "stress-test the",
@@ -339,11 +333,10 @@ def _is_stress_testing_request(message: str) -> bool:
 
 def _extract_stress_testing_components(message: str) -> Dict[str, str]:
     """
-    Extract stress testing components from user message.
+    Extract stress testing components from user message using LLM.
     
-    Patterns:
-    - "Stress-test the YYY erasure of 'XXX' on the 'ZZZ' model"
-    - "Run a stress test to verify the YYY erasure of 'XXX' from 'ZZZ' model"
+    Uses an LLM to intelligently parse the user's stress testing request
+    and extract the target concept, erasure method, and model.
     
     Args:
         message: User message containing stress testing request
@@ -351,83 +344,140 @@ def _extract_stress_testing_components(message: str) -> Dict[str, str]:
     Returns:
         Dictionary with concept, method, and model
     """
-    import re
+    import json
+    from langchain_ollama import ChatOllama
     
-    # Initialize components
+    # Initialize default components
     components = {
         "concept": "",
-        "method": "",
-        "model": ""
+        "method": "general",
+        "model": "stable diffusion"
+    }
+    
+    try:
+        # Create extraction prompt
+        extraction_prompt = f"""You are an expert in machine unlearning and concept erasure from diffusion models. 
+
+Your task is to extract key components from a stress testing request.
+
+USER MESSAGE: "{message}"
+
+Extract the following components:
+1. CONCEPT: The target concept/object to be erased (e.g., "pikachu", "van gogh style", "nudity", "violence")
+2. METHOD: The erasure method being tested (e.g., "ESD", "FMN", "SLD", "DARE", "TOFU", "Exact Unlearning", or "general" if not specified)
+3. MODEL: The target model (e.g., "stable diffusion", "SDXL", "midjourney", or infer from context)
+
+IMPORTANT RULES:
+- For CONCEPT: Extract the main concept being erased, remove quotes if present
+- For METHOD: Use "general" if no specific method is mentioned
+- For MODEL: Default to "stable diffusion" if not explicitly mentioned
+- Return ONLY a valid JSON object, no additional text
+
+OUTPUT FORMAT:
+{{
+    "concept": "extracted concept",
+    "method": "extracted method or general",
+    "model": "extracted model"
+}}
+
+Extract the components now:"""
+
+        # Call LLM for extraction
+        llm = ChatOllama(
+            model="gemma3",
+            temperature=0.0,
+            base_url="http://localhost:11434"
+        )
+        
+        response = llm.invoke(extraction_prompt)
+        response_text = response.content.strip()
+        
+        # Parse JSON response
+        try:
+            # Find JSON in response
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}') + 1
+            
+            if start_idx != -1 and end_idx != -1:
+                json_str = response_text[start_idx:end_idx]
+                extracted = json.loads(json_str)
+                
+                # Update components with extracted values
+                if extracted.get("concept"):
+                    components["concept"] = extracted["concept"].strip().strip('"\'')
+                if extracted.get("method"):
+                    components["method"] = extracted["method"].strip().lower()
+                if extracted.get("model"):
+                    components["model"] = extracted["model"].strip().lower()
+                    
+                logger.info(f"LLM extracted components: {components}")
+                
+            else:
+                logger.warning("No JSON found in LLM response, using fallback extraction")
+                components = _fallback_extraction(message)
+                
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}, using fallback extraction")
+            components = _fallback_extraction(message)
+            
+    except Exception as e:
+        logger.error(f"Error in LLM extraction: {e}, using fallback extraction")
+        components = _fallback_extraction(message)
+    
+    # Ensure we have at least a concept
+    if not components["concept"]:
+        logger.warning("No concept extracted, using fallback")
+        components = _fallback_extraction(message)
+    
+    return components
+
+
+def _fallback_extraction(message: str) -> Dict[str, str]:
+    """
+    Fallback extraction using simple regex patterns as backup.
+    
+    Args:
+        message: User message
+        
+    Returns:
+        Dictionary with extracted components
+    """
+    import re
+    
+    components = {
+        "concept": "",
+        "method": "general",
+        "model": "stable diffusion"
     }
     
     message_lower = message.lower()
     
-    # Pattern 1: "stress-test the METHOD erasure of 'CONCEPT' on the 'MODEL' model"
-    pattern1 = r'stress.?test\s+the\s+(\w+)\s+erasure\s+of\s+["\']?([^"\']+?)["\']?\s+on\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
-    match1 = re.search(pattern1, message_lower)
+    # Simple concept extraction from common patterns
+    concept_patterns = [
+        r'erasure\s+of\s+["\']?([^"\']+?)["\']?',
+        r'unlearning\s+of\s+["\']?([^"\']+?)["\']?',
+        r'remove\s+["\']?([^"\']+?)["\']?',
+        r'erase\s+["\']?([^"\']+?)["\']?',
+        r'test.*["\']([^"\']+)["\']'
+    ]
     
-    if match1:
-        components["method"] = match1.group(1).strip()
-        components["concept"] = match1.group(2).strip()
-        components["model"] = match1.group(3).strip()
-        return components
+    for pattern in concept_patterns:
+        match = re.search(pattern, message_lower)
+        if match:
+            components["concept"] = match.group(1).strip()
+            break
     
-    # Pattern 1.5: "stress-test the erasure of 'CONCEPT' on the 'MODEL' model" (no method specified)
-    pattern1_5 = r'stress.?test\s+the\s+erasure\s+of\s+["\']([^"\']+)["\']?\s+on\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
-    match1_5 = re.search(pattern1_5, message_lower)
-    
-    if match1_5:
-        components["concept"] = match1_5.group(1).strip()
-        components["model"] = match1_5.group(2).strip()
-        components["method"] = "general"  # Default method when not specified
-        return components
-    
-    # Pattern 2: "verify the METHOD erasure of 'CONCEPT' from 'MODEL' model"
-    pattern2 = r'(verify|test|check|evaluate)\s+the\s+(\w+)\s+erasure\s+of\s+["\']?([^"\']+?)["\']?\s+from\s+["\']?([^"\']+?)["\']?\s+model'
-    match2 = re.search(pattern2, message_lower)
-    
-    if match2:
-        components["method"] = match2.group(2).strip()
-        components["concept"] = match2.group(3).strip()
-        components["model"] = match2.group(4).strip()
-        return components
-    
-    # Pattern 3: "stress test CONCEPT erasure on MODEL" (no quotes)
-    pattern3 = r'stress.?test\s+(?:the\s+)?erasure\s+of\s+([a-zA-Z0-9_\-\s]+?)\s+on\s+([a-zA-Z0-9\-\s\.]+?)(?:\s*$|\s+model|\s*\.)'
-    match3 = re.search(pattern3, message_lower)
-    
-    if match3:
-        components["concept"] = match3.group(1).strip()
-        components["model"] = match3.group(2).strip()
-        return components
-    
-    # Pattern 4: "test the unlearning of CONCEPT concept on MODEL"
-    pattern4 = r'(test|verify|check|evaluate)\s+(?:the\s+)?unlearning\s+of\s+([a-zA-Z0-9_\-\s]+?)\s+concept\s+on\s+([a-zA-Z0-9\-\s\.]+?)(?:\s*$|\s+model|\s*\.)'
-    match4 = re.search(pattern4, message_lower)
-    
-    if match4:
-        components["concept"] = match4.group(2).strip()
-        components["model"] = match4.group(3).strip()
-        components["method"] = "general"
-        return components
-    
-    # Pattern 5: General concept and model extraction
-    concept_pattern = r'erasure\s+of\s+["\']?([^"\']+?)["\']?'
-    concept_match = re.search(concept_pattern, message_lower)
-    if concept_match:
-        components["concept"] = concept_match.group(1).strip()
-    
+    # Simple model extraction
     model_pattern = r'(?:on|from|in)\s+(?:the\s+)?["\']?([^"\']+?)["\']?\s+model'
     model_match = re.search(model_pattern, message_lower)
     if model_match:
         components["model"] = model_match.group(1).strip()
     
-    # Method extraction (if not found above)
-    if not components["method"]:
-        method_keywords = ["esd", "fmn", "sld", "dare", "tofu", "exact", "gradient", "latent"]
-        for keyword in method_keywords:
-            if keyword in message_lower:
-                components["method"] = keyword
-                break
+    # Method keywords
+    method_keywords = ["esd", "fmn", "sld", "dare", "tofu", "exact"]
+    for keyword in method_keywords:
+        if keyword in message_lower:
+            components["method"] = keyword
+            break
     
     return components

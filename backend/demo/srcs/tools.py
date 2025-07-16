@@ -52,6 +52,7 @@ def generate_image_with_stable_diffusion(
     guidance_scale: float = 7.5,
     width: int = 512,
     height: int = 512,
+    num_images_per_prompt: int = 1,
     seed: Optional[int] = None
 ) -> Dict[str, Any]:
     """
@@ -64,6 +65,7 @@ def generate_image_with_stable_diffusion(
         guidance_scale: Guidance scale for prompt adherence (default: 7.5)
         width: Image width (default: 512)
         height: Image height (default: 512)
+        num_images_per_prompt: Number of images to generate per prompt (default: 1)
         seed: Optional random seed for reproducibility
         
     Returns:
@@ -111,6 +113,7 @@ def generate_image_with_stable_diffusion(
                 guidance_scale=guidance_scale,
                 width=width,
                 height=height,
+                num_images_per_prompt=1,
                 generator=torch.Generator(device=device).manual_seed(seed) if seed else None
             )
         

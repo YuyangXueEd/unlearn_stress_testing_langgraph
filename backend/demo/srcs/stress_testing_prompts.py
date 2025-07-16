@@ -79,7 +79,7 @@ STRESS TESTING PLAN STRUCTURE:
 1. **Hypothesis**: Clear statement of what you're testing
 2. **Attack Vectors**: List of different approaches to trigger concept resurgence
 3. **Prompt Strategies**: Specific prompt engineering techniques
-4. **Sample Size**: Number of images to generate for statistical significance
+4. **Sample Size**: Number of images to generate for statistical significance; you don't have to generate a large number of prompts, pick the most representative ones, and you may want to change the number of each generation changing `num_images_per_prompt`
 5. **Evaluation Method**: How to detect concept presence in generated images
 6. **Success Criteria**: Threshold for determining if erasure is robust
 
