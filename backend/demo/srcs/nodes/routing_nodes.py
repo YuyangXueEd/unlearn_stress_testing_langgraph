@@ -143,7 +143,7 @@ def _is_image_generation_request(message: str) -> bool:
         # Direct generation keywords
         "generate image", "create image", "generate picture", "create picture",
         "generate an image", "create an image", "generate a picture", "create a picture",
-        "make image", "make picture", "make an image", "make a picture",
+        "make image", "make picture", "make an image", "make a picture", "generate me"
         
         # Photo-related keywords
         "generate photo", "create photo", "generate a photo", "create a photo",
