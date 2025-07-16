@@ -421,16 +421,28 @@ async def stress_code_generation_node(state: ChatState, config=None) -> ChatStat
                 "messages": [AIMessage(content=error_msg)]
             }
         
-        # Set model path and output directory
-        model_path = "demo/models/CompVis/stable-diffusion-v1-4"
-        output_dir = "demo/tmps"
+        # Set model path and output directory using proper absolute paths
+        model_path = Path(__file__).parent.parent.parent / "models" / "CompVis" / "stable-diffusion-v1-4"
+        output_dir = Path(__file__).parent.parent.parent / "tmps"
+        
+        # Ensure paths exist
+        if not model_path.exists():
+            error_msg = f"[ERROR] Stable Diffusion model not found at {model_path}"
+            return {
+                "response": error_msg,
+                "messages": [AIMessage(content=error_msg)]
+            }
+        
+        # Convert to string for the prompt
+        model_path_str = str(model_path)
+        output_dir_str = str(output_dir)
         
         # Generate code using the specialized prompt
         prompt = CODE_GENERATION_PROMPT.format(
             stress_testing_plan=plan,
             concept=concept,
-            model_path=model_path,
-            output_dir=output_dir
+            model_path=model_path_str,
+            output_dir=output_dir_str
         )
         
         # Call LLM to generate code
@@ -560,10 +572,12 @@ async def stress_execute_node(state: ChatState, config=None) -> ChatState:
     
     try:
         stress_testing = state.get("stress_testing", {})
-        test_code = stress_testing.get("test_code", "")
+        test_code = stress_testing.get("generated_code", "")  # Fixed: use "generated_code" not "test_code"
         
         if not test_code:
             return {
+                "response": "[ERROR] No test code available for execution",
+                "messages": [AIMessage(content="[ERROR] No test code available for execution")],
                 "stress_testing": {
                     **stress_testing,
                     "status": "error",
@@ -579,7 +593,10 @@ async def stress_execute_node(state: ChatState, config=None) -> ChatState:
         # Check execution status
         if execution_result.get("status") != "success":
             error_msg = execution_result.get("error", "Unknown execution error")
+            response_text = f"[Execute] **Code Execution Failed**\n\nError: {error_msg}\n\nOutput: {execution_result.get('output', '')}"
             return {
+                "response": response_text,
+                "messages": [AIMessage(content=response_text)],
                 "stress_testing": {
                     **stress_testing,
                     "status": "execution_failed",
@@ -615,20 +632,45 @@ async def stress_execute_node(state: ChatState, config=None) -> ChatState:
         
         logger.info(f"Stress testing execution completed. Generated {len(generated_images)} images.")
         
+        # Format execution response
+        response_text = f"""[Execute] **Stress Testing Code Executed Successfully**
+
+**Execution Summary:**
+- Generated Images: {len(generated_images)}
+- Execution Status: Success
+- Code Saved: {execution_result.get('code_path', 'N/A')}
+- Output Saved: {execution_result.get('output_path', 'N/A')}
+
+**Generated Images:**
+{chr(10).join([f"• {img['filename']} ({img['size']} bytes)" for img in generated_images[:5]])}
+{'• ...' if len(generated_images) > 5 else ''}
+
+**Execution Output:**
+{output[:500]}{'...' if len(output) > 500 else ''}
+
+**Proceeding to evaluation...**
+"""
+        
         return {
+            "response": response_text,
+            "messages": [AIMessage(content=response_text)],
             "stress_testing": {
                 **stress_testing,
                 "status": "execution_completed",
                 "execution_output": output,
-                "execution_time": execution_time,
+                "execution_result": execution_result,
                 "generated_images": generated_images,
                 "image_count": len(generated_images)
-            }
+            },
+            "task_type": "stress_evaluate"
         }
         
     except Exception as e:
         logger.error(f"Error in stress testing execution: {e}")
+        error_response = f"[Execute] **Execution Error**\n\nAn error occurred during code execution: {str(e)}"
         return {
+            "response": error_response,
+            "messages": [AIMessage(content=error_response)],
             "stress_testing": {
                 **state.get("stress_testing", {}),
                 "status": "error",
@@ -978,7 +1020,7 @@ Our stress testing methodology follows a systematic approach designed to identif
 
 The stress testing was conducted in a controlled environment with the following specifications:
 
-- **Model Path**: demo/models/CompVis/stable-diffusion-v1-4
+- **Model Path**: ../models/CompVis/stable-diffusion-v1-4
 - **Testing Framework**: Custom Python implementation
 - **Image Generation**: Diffusers library with torch backend
 - **Evaluation Pipeline**: Multi-modal concept detection system
