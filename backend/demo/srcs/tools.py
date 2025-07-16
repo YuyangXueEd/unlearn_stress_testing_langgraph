@@ -165,7 +165,7 @@ def generate_image_with_stable_diffusion(
 _python_repl = PythonREPLTool()
 
 
-@register_tool("execute_python")
+@register_tool("execute_python_code")
 async def execute_python_code(code: str) -> Dict[str, Any]:
     """
     Execute Python code safely using PythonREPLTool in a separate thread.
@@ -178,6 +178,9 @@ async def execute_python_code(code: str) -> Dict[str, Any]:
     """
     try:
         logger.info(f"Executing Python code: {code[:100]}...")
+        
+        # Ensure output directory exists
+        output_dir = ensure_output_directory()
         
         # Run the blocking PythonREPL operation in a separate thread
         result = await asyncio.to_thread(_python_repl.run, code)
@@ -207,6 +210,38 @@ async def execute_python_code(code: str) -> Dict[str, Any]:
         else:
             status = 'success'
             error = None
+        
+        # Save the executed code and its output to the tmps directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        code_filename = f"executed_code_{timestamp}.py"
+        output_filename = f"execution_output_{timestamp}.txt"
+        
+        code_path = output_dir / code_filename
+        output_path = output_dir / output_filename
+        
+        # Save the code
+        with open(code_path, 'w', encoding='utf-8') as f:
+            f.write(f"# Executed on {datetime.now().isoformat()}\n")
+            f.write(f"# Status: {status}\n\n")
+            f.write(code)
+        
+        # Save the output
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(f"Execution timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Status: {status}\n")
+            f.write(f"Code file: {code_filename}\n")
+            f.write("=" * 50 + "\n")
+            f.write("OUTPUT:\n")
+            f.write("=" * 50 + "\n")
+            f.write(output)
+            if error:
+                f.write("\n" + "=" * 50 + "\n")
+                f.write("ERROR:\n")
+                f.write("=" * 50 + "\n")
+                f.write(error)
+        
+        logger.info(f"Code saved to: {code_path}")
+        logger.info(f"Output saved to: {output_path}")
             
         return {
             'success': status == 'success',
@@ -214,19 +249,67 @@ async def execute_python_code(code: str) -> Dict[str, Any]:
             'output': output,
             'error': error,
             'traceback': output if has_error else None,
+            'code_path': str(code_path),
+            'output_path': str(output_path),
             'timestamp': datetime.now().isoformat()
         }
         
     except Exception as e:
         logger.error(f"Error executing Python code: {e}")
-        return {
-            'success': False,
-            'status': 'error',
-            'output': '',
-            'error': str(e),
-            'traceback': traceback.format_exc(),
-            'timestamp': datetime.now().isoformat()
-        }
+        
+        # Try to save the code even if execution failed
+        try:
+            output_dir = ensure_output_directory()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            code_filename = f"failed_code_{timestamp}.py"
+            error_filename = f"execution_error_{timestamp}.txt"
+            
+            code_path = output_dir / code_filename
+            error_path = output_dir / error_filename
+            
+            # Save the code that failed
+            with open(code_path, 'w', encoding='utf-8') as f:
+                f.write(f"# Failed execution on {datetime.now().isoformat()}\n")
+                f.write(f"# Error: {str(e)}\n\n")
+                f.write(code)
+            
+            # Save the error details
+            with open(error_path, 'w', encoding='utf-8') as f:
+                f.write(f"Execution timestamp: {datetime.now().isoformat()}\n")
+                f.write(f"Status: error\n")
+                f.write(f"Code file: {code_filename}\n")
+                f.write("=" * 50 + "\n")
+                f.write("ERROR:\n")
+                f.write("=" * 50 + "\n")
+                f.write(str(e))
+                f.write("\n" + "=" * 50 + "\n")
+                f.write("TRACEBACK:\n")
+                f.write("=" * 50 + "\n")
+                f.write(traceback.format_exc())
+            
+            logger.info(f"Failed code saved to: {code_path}")
+            logger.info(f"Error details saved to: {error_path}")
+            
+            return {
+                'success': False,
+                'status': 'error',
+                'output': '',
+                'error': str(e),
+                'traceback': traceback.format_exc(),
+                'code_path': str(code_path),
+                'output_path': str(error_path),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as save_error:
+            logger.error(f"Failed to save code after execution error: {save_error}")
+            return {
+                'success': False,
+                'status': 'error',
+                'output': '',
+                'error': str(e),
+                'traceback': traceback.format_exc(),
+                'timestamp': datetime.now().isoformat()
+            }
 
 
 def get_available_tools() -> Dict[str, Any]:
@@ -246,13 +329,13 @@ def get_available_tools() -> Dict[str, Any]:
             },
             "example": "generate_image('a beautiful sunset over mountains')"
         },
-        "execute_python": {
-            "name": "execute_python",
+        "execute_python_code": {
+            "name": "execute_python_code",
             "description": "Execute Python code safely and return results",
             "parameters": {
                 "code": "Python code to execute"
             },
-            "example": "execute_python('print(5 + 7)')"
+            "example": "execute_python_code('print(5 + 7)')"
         }
     }
 
