@@ -7,8 +7,17 @@ Nodes responsible for determining the flow and routing messages to appropriate h
 import logging
 from typing import Dict
 from state import ChatState
+from configuration import DemoConfiguration
 
 logger = logging.getLogger(__name__)
+
+# Configuration instance for model settings
+_config = DemoConfiguration()
+
+
+def _get_model_name(state: ChatState) -> str:
+    """Get the model name from state or configuration."""
+    return state.get("model_name", _config.model_name)
 
 
 def router_node(state: ChatState) -> ChatState:
@@ -39,7 +48,7 @@ def router_node(state: ChatState) -> ChatState:
         if _is_stress_testing_request(user_message):
             task_type = "stress_testing"
             # Extract stress testing context
-            stress_context = _extract_stress_testing_components(user_message)
+            stress_context = _extract_stress_testing_components(user_message, state)
         elif _is_image_generation_request(user_message):
             task_type = "image_generation"
         elif _is_code_generation_request(user_message):
@@ -331,7 +340,7 @@ def _is_stress_testing_request(message: str) -> bool:
     return False
 
 
-def _extract_stress_testing_components(message: str) -> Dict[str, str]:
+def _extract_stress_testing_components(message: str, state: ChatState) -> Dict[str, str]:
     """
     Extract stress testing components from user message using LLM.
     
@@ -340,6 +349,7 @@ def _extract_stress_testing_components(message: str) -> Dict[str, str]:
     
     Args:
         message: User message containing stress testing request
+        state: Current chat state for accessing configuration
         
     Returns:
         Dictionary with concept, method, and model
@@ -384,7 +394,7 @@ Extract the components now:"""
 
         # Call LLM for extraction
         llm = ChatOllama(
-            model="gemma3",
+            model=_get_model_name(state),
             temperature=0.0,
             base_url="http://localhost:11434"
         )

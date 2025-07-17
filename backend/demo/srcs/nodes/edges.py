@@ -93,12 +93,20 @@ def setup_conditional_edges(builder):
     builder.add_edge("rag_query", "rag_search")
     builder.add_edge("rag_search", "hypothesize")
     builder.add_edge("hypothesize", "stress_code_gen")
-    builder.add_edge("stress_code_gen", "stress_execute")
+    builder.add_conditional_edges(
+        "stress_code_gen",
+        determine_stress_code_gen_route,
+        {
+            "execute": "stress_execute",  # Normal flow: generate -> execute
+            "end": "stress_evaluator"  # Max attempts reached
+        }
+    )
     builder.add_conditional_edges(
         "stress_execute",
         determine_stress_execute_route,
         {
-            "evaluator": "stress_evaluator"
+            "refine": "stress_code_gen",  # Loop back to generation for refinement
+            "evaluate": "stress_evaluator"  # Go to evaluation if successful
         }
     )
     builder.add_conditional_edges(
@@ -198,17 +206,81 @@ def determine_code_workflow_next(state):
     return "end"
 
 
-def determine_stress_execute_route(state):
+def determine_stress_code_gen_route(state):
     """
-    Determine next step after stress testing code execution - always go to evaluator.
+    Determine next step after stress testing code generation.
+    
+    Routes based on attempt count:
+    - "execute": Normal flow or retry (attempt <= 3)
+    - "end": Max attempts reached (attempt > 3)
     
     Args:
         state: Current chat state
         
     Returns:
-        String indicating next node: 'evaluator'
+        String indicating next node: 'execute' or 'end'
     """
-    return "evaluator"
+    stress_testing = state.get("stress_testing", {})
+    current_attempt = stress_testing.get("code_attempt", 1)
+    max_attempts = 3
+    
+    # End if max attempts reached
+    if current_attempt > max_attempts:
+        return "end"
+    
+    # Otherwise proceed to execution
+    return "execute"
+
+
+def determine_stress_execute_route(state):
+    """
+    Determine next step after stress testing code execution.
+    
+    Routes based on execution results:
+    - "refine": If execution failed OR no images generated (loop back to generation)
+    - "evaluate": If execution successful AND images generated
+    
+    Args:
+        state: Current chat state
+        
+    Returns:
+        String indicating next node: 'refine' or 'evaluate'
+    """
+    stress_testing = state.get("stress_testing", {})
+    execution_result = stress_testing.get("execution_result", {})
+    generated_images = stress_testing.get("generated_images", [])
+    
+    # Route to refinement (back to code generation) if execution failed OR no images generated
+    if execution_result.get("status") != "success" or len(generated_images) == 0:
+        return "refine"
+    
+    # Route to evaluation if execution successful AND images generated
+    return "evaluate"
+
+
+def determine_stress_refinement_route(state):
+    """
+    Determine next step after stress code refinement analysis.
+    
+    Routes based on the refinement decision:
+    - "refine": Go back to code generation for improvement
+    - "continue": Proceed to evaluation
+    
+    Args:
+        state: Current chat state
+        
+    Returns:
+        String indicating next node: 'refine' or 'continue'
+    """
+    task_type = state.get("task_type", "")
+    
+    if task_type == "stress_code_gen":
+        return "refine"  # Route back to code generation
+    elif task_type == "stress_evaluate":
+        return "continue"  # Route to evaluation
+    else:
+        # Default to continue if task_type is unclear
+        return "continue"
 
 
 def determine_evaluator_route(state):

@@ -12,7 +12,7 @@ class DemoConfiguration(BaseModel):
     
     # Model settings
     model_name: str = Field(
-        default="gemma3",
+        default="qwen3",
         description="The name of the language model to use"
     )
     

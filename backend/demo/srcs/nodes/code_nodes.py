@@ -19,6 +19,17 @@ from pathlib import Path
 from langchain_experimental.tools import PythonREPLTool
 from langchain_ollama import ChatOllama
 from langchain_core.messages import AIMessage
+
+from state import ChatState
+from configuration import DemoConfiguration
+
+# Configuration instance for model settings
+_config = DemoConfiguration()
+
+
+def _get_model_name(state: ChatState) -> str:
+    """Get the model name from state or configuration."""
+    return state.get("model_name", _config.model_name)
 from state import ChatState
 from tools import execute_tool_async
 import aiofiles  # For async file operations
@@ -98,7 +109,7 @@ async def generate(state: ChatState, config=None) -> ChatState:
         logger.info(f"Generated prompt: {prompt[:200]}...")
         
         # Generate code using LLM
-        model_name = state.get("model_name", "gemma3")
+        model_name = _get_model_name(state)
         llm = ChatOllama(
             model=model_name,
             temperature=0.1,

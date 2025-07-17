@@ -9,9 +9,18 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_ollama import ChatOllama
 
 from state import ChatState
+from configuration import DemoConfiguration
 from prompts import get_chat_prompt, get_error_prompt, get_fallback_prompt
 
 logger = logging.getLogger(__name__)
+
+# Configuration instance for model settings
+_config = DemoConfiguration()
+
+
+def _get_model_name(state: ChatState) -> str:
+    """Get the model name from state or configuration."""
+    return state.get("model_name", _config.model_name)
 
 
 def chat_node(state: ChatState) -> ChatState:
@@ -43,7 +52,7 @@ def chat_node(state: ChatState) -> ChatState:
             return {"response": get_fallback_prompt()}
         
         # Initialize the chat model
-        model_name = state.get("model_name", "gemma3")
+        model_name = _get_model_name(state)
         chat = ChatOllama(
             model=model_name,
             temperature=0.7,
@@ -132,7 +141,7 @@ def finalise_answer(state: ChatState) -> ChatState:
             return chat_node(state)
         
         # Initialize the chat model
-        model_name = state.get("model_name", "gemma3")
+        model_name = _get_model_name(state)
         chat = ChatOllama(
             model=model_name,
             temperature=0.3,  # Lower temperature for more focused responses

@@ -38,25 +38,32 @@ class ChatState(TypedDict):
     
     # Stress testing state
     stress_testing: Optional[Dict[str, Any]]  # Store stress testing workflow state including:
-                                            # - status: current workflow status
-                                            # - concept: concept to be tested (XXX)
-                                            # - method: erasure method (YYY, optional)
-                                            # - model: target model name (ZZZ)
+                                            # - status: current workflow status  
+                                            # - concept: concept to be tested (extracted from user input)
+                                            # - method: erasure method (used in queries, not stored as state)
+                                            # - model: target model name (extracted from user input)
                                             # - iteration: current iteration number
                                             # - max_iterations: maximum iterations allowed
                                             # - plan: generated stress testing plan
-                                            # - rag_results: results from RAG search
-                                            # - test_code: generated testing code
-                                            # - execution_results: test execution results
-                                            # - evaluation_results: concept detection results
-                                            # - concept_resurgence_rate: percentage of concept presence
-                                            # - report_content: final report content
-                                            # - generated_images: list of generated test images
+                                            # - plan_generated_at: timestamp when plan was generated
                                             # - refined_queries: refined search queries for RAG
-                                                    # - refined_queries: RAG query results
-                                                    # - rag_results: database search results
-                                                    # - plan: generated testing plan
-                                                    # - generated_code: stress testing code
-                                                    # - execution_results: test execution results
-                                                    # - evaluation_results: concept detection results
-                                                    # - iteration: current iteration number
+                                            # - rag_results: aggregated results from RAG search
+                                            # - generated_code: generated testing code
+                                            # - code_filename: filename where code was saved
+                                            # - code_generated_at: timestamp when code was generated  
+                                            # - code_attempt: current code generation attempt
+                                            # - previous_errors: list of previous error messages
+                                            # - execution_result: test execution results object
+                                            # - execution_output: execution output text
+                                            # - execution_analysis: LLM analysis of execution results
+                                            # - generated_images: list of generated test images with metadata
+                                            # - image_count: number of generated images
+                                            # - evaluation_code: generated evaluation code
+                                            # - evaluation_result: raw evaluation execution result
+                                            # - evaluation_output: evaluation execution output text
+                                            # - evaluation_method: evaluation methodology from plan
+                                            # - evaluation_assessment: LLM assessment of results
+                                            # - evaluation_error: error message if evaluation fails
+                                            # - concept_resurgence_rate: percentage of concept presence
+                                            # - error: general error field for various error states
+                                            # - report_content: final report content
