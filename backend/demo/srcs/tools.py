@@ -9,7 +9,9 @@ import logging
 import base64
 import asyncio
 import traceback
-from typing import Dict, Any, Optional
+import subprocess
+import re
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from pathlib import Path
 
@@ -166,6 +168,192 @@ def generate_image_with_stable_diffusion(
 
 # Initialize PythonREPL tool
 _python_repl = PythonREPLTool()
+
+
+async def execute_python_code_in_venv(
+    code: str, 
+    requirements: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Execute Python code in the current environment with optional package installation.
+    
+    Args:
+        code: Python code to execute
+        requirements: Optional requirements.txt content
+        
+    Returns:
+        Dictionary containing execution results, output, and error information
+    """
+    try:
+        logger.info(f"Executing Python code: {code[:100]}...")
+        
+        # Ensure output directory exists
+        output_dir = ensure_output_directory()
+        
+        # Create unique workspace for this execution
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        workspace_dir = output_dir / f"workspace_{timestamp}"
+        workspace_dir.mkdir(exist_ok=True)
+        
+        # Install dependencies if requirements provided
+        if requirements:
+            requirements_path = workspace_dir / "requirements.txt"
+            
+            # Write requirements.txt
+            with open(requirements_path, 'w', encoding='utf-8') as f:
+                f.write(requirements)
+            
+            # Check if we need to install packages
+            req_lines = [line.strip() for line in requirements.split('\n') if line.strip() and not line.startswith('#')]
+            
+            if req_lines:
+                # Install dependencies in current environment
+                install_cmd = ["pip", "install", "-r", str(requirements_path)]
+                try:
+                    logger.info(f"Installing packages: {', '.join(req_lines[:3])}{'...' if len(req_lines) > 3 else ''}")
+                    result = await asyncio.wait_for(
+                        asyncio.create_subprocess_exec(
+                            *install_cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                            cwd=str(workspace_dir)
+                        ),
+                        timeout=600  # 10 minute timeout for package installation
+                    )
+                    stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=600)
+                except asyncio.TimeoutError:
+                    raise Exception("Package installation timed out after 10 minutes")
+                
+                if result.returncode != 0:
+                    logger.warning(f"Some dependencies failed to install: {stderr.decode()}")
+                else:
+                    logger.info("Package installation completed successfully")
+        
+        # Write the Python code to file
+        code_file = workspace_dir / f"test_code_{timestamp}.py"
+        with open(code_file, 'w', encoding='utf-8') as f:
+            f.write(code)
+        
+        # Execute the code in current environment
+        exec_cmd = ["python", str(code_file)]
+        try:
+            result = await asyncio.wait_for(
+                asyncio.create_subprocess_exec(
+                    *exec_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(workspace_dir)
+                ),
+                timeout=300  # 5 minute timeout for code execution
+            )
+            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=300)
+        except asyncio.TimeoutError:
+            raise Exception("Code execution timed out after 5 minutes")
+        
+        output = stdout.decode('utf-8', errors='ignore')
+        error_output = stderr.decode('utf-8', errors='ignore')
+        
+        # Determine execution status
+        has_error = result.returncode != 0
+        combined_output = output + error_output
+        
+        # Check for error indicators in output
+        error_indicators = [
+            'Traceback (most recent call last):',
+            'Error:', 'Exception:', 'ValueError:', 'TypeError:', 'NameError:',
+            'SyntaxError:', 'AttributeError:', 'KeyError:', 'IndexError:',
+            'ZeroDivisionError:', 'ImportError:', 'ModuleNotFoundError:'
+        ]
+        
+        if not has_error:
+            has_error = any(indicator in combined_output for indicator in error_indicators)
+        
+        status = 'error' if has_error else 'success'
+        
+        logger.info(f"Virtual environment execution completed: {status}")
+        logger.info(f"Output: {combined_output[:200]}...")
+        
+        # Save execution results
+        execution_log = workspace_dir / f"execution_log_{timestamp}.txt"
+        with open(execution_log, 'w', encoding='utf-8') as f:
+            f.write(f"Execution timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Status: {status}\n")
+            f.write(f"Return code: {result.returncode}\n")
+            f.write(f"Code file: {code_file.name}\n")
+            f.write("=" * 50 + "\n")
+            f.write("STDOUT:\n")
+            f.write("=" * 50 + "\n")
+            f.write(output)
+            f.write("\n" + "=" * 50 + "\n")
+            f.write("STDERR:\n")
+            f.write("=" * 50 + "\n")
+            f.write(error_output)
+            if requirements:
+                f.write("\n" + "=" * 50 + "\n")
+                f.write("REQUIREMENTS:\n")
+                f.write("=" * 50 + "\n")
+                f.write(requirements)
+        
+        return {
+            'success': status == 'success',
+            'status': status,
+            'output': combined_output,
+            'error': error_output if has_error else None,
+            'traceback': error_output if has_error else None,
+            'return_code': result.returncode,
+            'code_path': str(code_file),
+            'output_path': str(execution_log),
+            'workspace_dir': str(workspace_dir),
+            'venv_dir': str(venv_dir),
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error executing Python code in virtual environment: {e}")
+        
+        # Try to save error details
+        try:
+            output_dir = ensure_output_directory()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            error_file = output_dir / f"venv_error_{timestamp}.txt"
+            
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write(f"Virtual environment execution error: {datetime.now().isoformat()}\n")
+                f.write(f"Error: {str(e)}\n")
+                f.write("=" * 50 + "\n")
+                f.write("TRACEBACK:\n")
+                f.write("=" * 50 + "\n")
+                f.write(traceback.format_exc())
+                f.write("\n" + "=" * 50 + "\n")
+                f.write("CODE:\n")
+                f.write("=" * 50 + "\n")
+                f.write(code)
+                if requirements:
+                    f.write("\n" + "=" * 50 + "\n")
+                    f.write("REQUIREMENTS:\n")
+                    f.write("=" * 50 + "\n")
+                    f.write(requirements)
+            
+            return {
+                'success': False,
+                'status': 'error',
+                'output': '',
+                'error': str(e),
+                'traceback': traceback.format_exc(),
+                'code_path': '',
+                'output_path': str(error_file),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as save_error:
+            logger.error(f"Failed to save error details: {save_error}")
+            return {
+                'success': False,
+                'status': 'error',
+                'output': '',
+                'error': str(e),
+                'traceback': traceback.format_exc(),
+                'timestamp': datetime.now().isoformat()
+            }
 
 
 @register_tool("execute_python_code")

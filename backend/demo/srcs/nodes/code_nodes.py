@@ -142,6 +142,7 @@ async def generate(state: ChatState, config=None) -> ChatState:
                 **code_gen,
                 'status': 'generated',
                 'code': parsed_result['code'],
+                'requirements_txt': parsed_result.get('requirements_txt', ''),
                 'explanation': parsed_result.get('explanation', ''),
                 'attempt': attempt,
                 'previous_errors': previous_errors
@@ -256,7 +257,8 @@ async def decide_to_finish(state: ChatState, config=None) -> ChatState:
             file_path = await _save_code_to_file(
                 code_gen['code'],
                 code_gen.get('requirements', ''),
-                code_gen.get('validation_result', {})
+                code_gen.get('validation_result', {}),
+                code_gen.get('requirements_txt', '')
             )
             
             response = _format_success_response(code_gen, file_path)
@@ -392,6 +394,10 @@ OUTPUT FORMAT:
 # Your focused Python code here
 ```
 
+```requirements.txt
+# List any Python packages needed (without version numbers)
+```
+
 Brief explanation of what the code does.
 """
     
@@ -399,7 +405,7 @@ Brief explanation of what the code does.
 
 
 def _parse_code_response(response_text: str) -> Dict[str, Any]:
-    """Parse LLM response to extract Python code and explanation."""
+    """Parse LLM response to extract Python code, requirements, and explanation."""
     try:
         # Extract code from markdown blocks
         code_pattern = r'```python\s*(.*?)```'
@@ -413,7 +419,26 @@ def _parse_code_response(response_text: str) -> Dict[str, Any]:
             generic_match = re.search(generic_pattern, response_text, re.DOTALL)
             code = generic_match.group(1).strip() if generic_match else response_text.strip()
         
-        # Extract explanation (text after code block)
+        # Extract requirements.txt content
+        requirements_pattern = r'```requirements\.txt\s*(.*?)```'
+        requirements_match = re.search(requirements_pattern, response_text, re.DOTALL | re.IGNORECASE)
+        
+        if requirements_match:
+            requirements_txt = requirements_match.group(1).strip()
+        else:
+            # Try alternative patterns
+            alt_patterns = [
+                r'```requirements\s*(.*?)```',
+                r'```txt\s*(.*?)```'
+            ]
+            requirements_txt = ""
+            for pattern in alt_patterns:
+                match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                if match:
+                    requirements_txt = match.group(1).strip()
+                    break
+        
+        # Extract explanation (text after all code blocks)
         explanation_parts = response_text.split('```')
         explanation = explanation_parts[-1].strip() if len(explanation_parts) > 1 else "Generated Python code based on requirements."
         
@@ -422,6 +447,7 @@ def _parse_code_response(response_text: str) -> Dict[str, Any]:
             
         return {
             'code': code,
+            'requirements_txt': requirements_txt,
             'explanation': explanation
         }
         
@@ -429,6 +455,7 @@ def _parse_code_response(response_text: str) -> Dict[str, Any]:
         logger.error(f"Error parsing code response: {e}")
         return {
             'code': response_text.strip(),
+            'requirements_txt': "",
             'explanation': "Generated Python code."
         }
 
@@ -507,8 +534,8 @@ def _make_finish_decision(code_gen: Dict[str, Any], max_attempts: int) -> Dict[s
     return {'action': 'continue_refining'}
 
 
-async def _save_code_to_file(code: str, requirements: str, validation_result: Dict[str, Any]) -> str:
-    """Save successful code to file using async file operations."""
+async def _save_code_to_file(code: str, requirements: str, validation_result: Dict[str, Any], requirements_txt: str = "") -> str:
+    """Save successful code and requirements to files using async file operations."""
     try:
         # Get tmps directory - same pattern as image generation
         # Current file is at: backend/demo/srcs/nodes/code_nodes.py
@@ -535,6 +562,16 @@ async def _save_code_to_file(code: str, requirements: str, validation_result: Di
         # Use aiofiles for async file writing
         async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
             await f.write(header + code)
+        
+        # Save requirements.txt if provided
+        if requirements_txt:
+            requirements_filename = f"requirements_{timestamp}_{safe_name}.txt"
+            requirements_path = tmps_dir / requirements_filename
+            
+            async with aiofiles.open(requirements_path, 'w', encoding='utf-8') as f:
+                await f.write(requirements_txt)
+            
+            logger.info(f"Requirements saved to: {requirements_path}")
         
         logger.info(f"Code saved to: {file_path}")
         return str(file_path)

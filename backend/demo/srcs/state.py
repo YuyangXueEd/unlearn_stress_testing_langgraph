@@ -35,6 +35,7 @@ class ChatState(TypedDict):
                                              # - validation_result: code validation results
                                              # - error: any error messages
                                              # - error_context: context for iteration feedback
+                                             # - requirements_txt: generated requirements.txt content
     
     # Stress testing state
     stress_testing: Optional[Dict[str, Any]]  # Store stress testing workflow state including:
@@ -67,3 +68,5 @@ class ChatState(TypedDict):
                                             # - concept_resurgence_rate: percentage of concept presence
                                             # - error: general error field for various error states
                                             # - report_content: final report content
+                                            # - execution_requirements_txt: requirements.txt for execution phase
+                                            # - evaluation_requirements_txt: requirements.txt for evaluation phase
